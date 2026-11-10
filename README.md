@@ -6,6 +6,8 @@ Static web dashboard application for **Ibis Rice Conservation Company (IRCC)**.
 
 ```text
 ├── .gitignore              # Excludes source spreadsheets, reports, raw JSON data, and local files
+├── CNAME                   # Custom domain mapping for GitHub Pages (forecast.icsserver.com)
+├── README.md               # Deployment and repository structure guide
 ├── index.html              # Protected dashboard entry point (GitHub Pages)
 ├── assets/
 │   └── ircc-logo.png       # IRCC logo used on the dark-mode login screen
