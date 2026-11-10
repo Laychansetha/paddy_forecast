@@ -1,0 +1,35 @@
+# Source spreadsheets & exported financial/forecast tables
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+~$*
+
+# Source calculation guides & PDF reports
+*.docx
+*.doc
+*.pdf
+
+# Raw JSON datasets (web dashboard reads js/data.js)
+data/
+*.json
+
+# Standalone prototype dashboard (superseded by index.html)
+paddy_forecast_dashboard.html
+
+# Local scripts, environments & secrets
+.env
+.env.*
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.bak
+
+# OS & editor metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IRCC Long-Term Paddy Purchase Forecast (2027–2033) — Interactive Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/custom.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased">
+
+    <!-- Login Screen (Dark Mode Protected Access) -->
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-950 px-4 py-8">
+        <div class="bg-slate-900/90 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700/80 max-w-md w-full p-8 space-y-6">
+            <div class="text-center space-y-4">
+                <img src="assets/ircc-logo.png" alt="Ibis Rice Conservation Company" class="w-44 h-44 object-contain mx-auto">
+                <h1 class="text-xl font-extrabold text-white tracking-tight">Long-Term Paddy Purchase Forecast</h1>
+            </div>
+
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label for="loginUsername" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">Username</label>
+                    <input id="loginUsername" type="text" autocomplete="username" required placeholder="Enter username"
+                           class="w-full px-3.5 py-2.5 text-sm text-white placeholder-slate-400 rounded-xl border border-slate-700 bg-slate-800/90 focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition">
+                </div>
+
+                <div>
+                    <label for="loginPassword" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">Password</label>
+                    <div class="relative">
+                        <input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Enter password"
+                               class="w-full px-3.5 py-2.5 pr-10 text-sm text-white placeholder-slate-400 rounded-xl border border-slate-700 bg-slate-800/90 focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition">
+                        <button id="togglePwdVisibility" type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-emerald-300 transition cursor-pointer" title="Show / Hide Password">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="loginError" class="hidden text-xs font-medium text-rose-300 bg-rose-950/60 border border-rose-500/40 rounded-lg px-3 py-2 text-center">
+                    Invalid username or password. Please try again.
+                </div>
+
+                <button type="submit" class="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-sm font-extrabold rounded-xl shadow-lg shadow-emerald-500/25 transition cursor-pointer">
+                    Sign In to Dashboard
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Protected Dashboard Shell -->
+    <div id="dashboardShell" class="hidden min-h-screen flex flex-col">
+
+    <!-- Top Navigation & Header -->
+    <header class="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white border-b border-emerald-900/50 sticky top-0 z-50 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-4">
+            <!-- Brand & Title (Centered) -->
+            <div class="text-center pb-4">
+                <div class="inline-flex items-center justify-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/20">
+                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span class="text-xs sm:text-sm font-bold tracking-[0.18em] uppercase text-emerald-300">Ibis Rice Conservation Company (IRCC)</span>
+                </div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-2">
+                    Long-Term Paddy Purchase &amp; Farmer Forecast (2027–2033)
+                </h1>
+            </div>
+
+            <!-- Tab Navigation Bar (Centered, Larger, Colorful) -->
+            <nav class="flex flex-wrap items-center justify-center gap-2.5 pt-3 border-t border-slate-800/80 text-sm font-bold">
+                <button class="tab-btn active inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 text-slate-200 hover:text-white hover:bg-slate-800 hover:border-emerald-400/50 whitespace-nowrap transition cursor-pointer" data-tab="tab-overview">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    Executive Overview
+                </button>
+                <button class="tab-btn inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 text-slate-200 hover:text-white hover:bg-slate-800 hover:border-sky-400/50 whitespace-nowrap transition cursor-pointer" data-tab="tab-forecast">
+                    <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                    Purchase Forecast
+                </button>
+                <button class="tab-btn inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 text-slate-200 hover:text-white hover:bg-slate-800 hover:border-violet-400/50 whitespace-nowrap transition cursor-pointer" data-tab="tab-historical">
+                    <span class="w-2 h-2 rounded-full bg-violet-400"></span>
+                    Historical (2022–2026)
+                </button>
+                <button class="tab-btn inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 text-slate-200 hover:text-white hover:bg-slate-800 hover:border-amber-400/50 whitespace-nowrap transition cursor-pointer" data-tab="tab-transition">
+                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                    Conversion &amp; Incentives
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Body -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1 w-full">
+
+        <!-- ============================================================== -->
+        <!-- TAB 1: EXECUTIVE OVERVIEW -->
+        <!-- ============================================================== -->
+        <section id="tab-overview" class="tab-content space-y-6">
+
+            <!-- Executive KPI Scorecards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 h-1 w-full bg-emerald-600"></div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">2033 Organic Purchases</span>
+                    <div id="kpiOrganicVol" class="text-2xl font-extrabold text-slate-900 mt-1">4,411 MT</div>
+                    <div id="kpiOrganicVolSub" class="mt-2 text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                        <span>↑ +21.4% vs 2026 (3,633 MT)</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 h-1 w-full bg-blue-600"></div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">2033 Selling Farmers</span>
+                    <div id="kpiSellingFarmers" class="text-2xl font-extrabold text-slate-900 mt-1">2,064 farmers</div>
+                    <div id="kpiSellingFarmersSub" class="mt-2 text-xs text-blue-700 font-semibold flex items-center gap-1">
+                        <span>↑ +364 organic sellers net</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 h-1 w-full bg-amber-600"></div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Steady-State Transition Volume</span>
+                    <div id="kpiTransitionVol" class="text-2xl font-extrabold text-slate-900 mt-1">5,211 MT / yr</div>
+                    <div id="kpiTransitionVolSub" class="mt-2 text-xs text-amber-700 font-semibold flex items-center gap-1">
+                        <span>From 1,179 in-conversion farmers (Yr 0, 1, 2)</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 h-1 w-full bg-purple-600"></div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Annual Transition Incentive</span>
+                    <div id="kpiIncentive" class="text-2xl font-extrabold text-slate-900 mt-1">$109,142</div>
+                    <div id="kpiIncentiveSub" class="mt-2 text-xs text-purple-700 font-semibold flex items-center gap-1">
+                        <span>≈ 447.5 Million KHR (@ 4,100 KHR/$)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Two Core Trajectory Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Master Procurement Trajectory -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center gap-2 mb-1">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">Organic Purchases: Actuals & Forecast</h2>
+                            <span class="text-xs bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full font-semibold whitespace-nowrap shrink-0">2022–2033</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-3">Actual purchases (2022–2025) with 2026 near-term forecast &amp; 2027–2033 projections by variety.</p>
+                    </div>
+                    <div class="relative h-72 w-full">
+                        <canvas id="chartTrajectory"></canvas>
+                    </div>
+                </div>
+
+                <!-- Farmer Progression Pipeline -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center gap-2 mb-1">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">Farmer Pipeline by Status</h2>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-3">Active headcounts across Organic, WF, Ibis I & Ibis II (11.59% NC rate; 2026 base = 2,564).</p>
+                    </div>
+                    <div class="relative h-72 w-full">
+                        <canvas id="chartFarmerPipeline"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ============================================================== -->
+        <!-- TAB 2: LONG-TERM PURCHASE FORECAST (2027–2033) -->
+        <!-- ============================================================== -->
+        <section id="tab-forecast" class="tab-content hidden space-y-6">
+
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <h2 class="text-base font-bold text-slate-900">Paddy Purchase &amp; Farmer Forecast Table (2026 - 2033)</h2>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button id="btnExportCSV" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer">
+                            <svg class="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            Download CSV
+                        </button>
+                        <button id="btnExportExcel" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            Download Excel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Master Table Container -->
+                <div id="masterTableContainer" class="overflow-x-auto custom-scrollbar border border-slate-200 rounded-lg">
+                    <!-- Injected by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Scenario Sensitivity Comparison -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div>
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-900">What-If Supply Scenarios (2026–2033)</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">How organic paddy supply changes depending on new farmer intake and Non-Compliance (NC) rates.</p>
+                </div>
+                <div class="relative h-64 w-full">
+                    <canvas id="chartScenarios"></canvas>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
+                    <div class="p-3 rounded-lg bg-emerald-50/70 border border-emerald-200">
+                        <div class="font-bold text-emerald-900">Best Case → 6,247 MT (2033)</div>
+                        <p class="text-emerald-800/90 mt-0.5">Recruit 650 new farmers/yr &amp; lower NC to 8.5%.</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-sky-50/70 border border-sky-200">
+                        <div class="font-bold text-sky-900">Main Plan → 4,411 MT (2033)</div>
+                        <p class="text-sky-800/90 mt-0.5">Current baseline: 500 new farmers/yr &amp; 11.59% NC.</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-rose-50/70 border border-rose-200">
+                        <div class="font-bold text-rose-900">Risk Case → 3,144 MT (2033)</div>
+                        <p class="text-rose-800/90 mt-0.5">Slower intake (400/yr) &amp; higher NC (14.82%) shrinks supply.</p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ============================================================== -->
+        <!-- TAB 3: HISTORICAL PERFORMANCE (2022–2026) -->
+        <!-- ============================================================== -->
+        <section id="tab-historical" class="tab-content hidden space-y-6">
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Historical Realization Chart -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">Actual Sales vs. Farmer Estimates (%)</h2>
+                            <span class="text-xs bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full font-semibold">5-Yr Avg: 71.4%</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-4">Share of estimated paddy actually sold to IRCC (farmers deliver 71.4% on average, below the 80% rule of thumb; *2026 near-term).</p>
+                    </div>
+                    <div class="relative h-64 w-full">
+                        <canvas id="chartRealization"></canvas>
+                    </div>
+                </div>
+
+                <!-- Variety Distribution Shift Analysis -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">Historical Variety Mix Evolution (2022–2026)</h2>
+                            <span class="text-xs bg-blue-50 text-blue-800 px-2 py-0.5 rounded font-semibold">Procurement Shares</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-2">The dramatic commercial evolution of purchases over the past 5 seasons:</p>
+                    </div>
+                    <div class="space-y-2 text-xs">
+                        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div class="flex justify-between font-semibold text-slate-800">
+                                <span>Phka Rumduol (Fragrant Jasmine):</span>
+                                <span class="text-emerald-700">87.2% (2022) → 46.5% (2026)</span>
+                            </div>
+                            <p class="text-slate-500 text-[11px] mt-0.5">Traditionally the dominant crop; adjusted as farmers diversify to meet regional market demand.</p>
+                        </div>
+                        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div class="flex justify-between font-semibold text-slate-800">
+                                <span>White Rice:</span>
+                                <span class="text-blue-700">8.7% (2022) → 40.2% (2026)</span>
+                            </div>
+                            <p class="text-slate-500 text-[11px] mt-0.5">Surged rapidly; essential for IRCC to contract white rice to prevent non-organic sales leakage.</p>
+                        </div>
+                        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div class="flex justify-between font-semibold text-slate-800">
+                                <span>Red Jasmine:</span>
+                                <span class="text-red-700">0.8% (2022) → 11.8% (2026)</span>
+                            </div>
+                            <p class="text-slate-500 text-[11px] mt-0.5">High-margin niche variety with excellent resilience in sandy soils.</p>
+                        </div>
+                        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div class="flex justify-between font-semibold text-slate-800">
+                                <span>Seed Paddy:</span>
+                                <span class="text-amber-700">3.3% (2022) → 1.4% (2026)</span>
+                            </div>
+                            <p class="text-slate-500 text-[11px] mt-0.5">Consistently maintained at 1.2%–1.5% to ensure certified pure seed stocks.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historical Data Table Container -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-900 mb-2">AFL and Paddy Purchase 2022 - 2026</h3>
+                <div id="historicalTableContainer" class="overflow-x-auto custom-scrollbar border border-slate-200 rounded-lg">
+                    <!-- Injected by JavaScript -->
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ============================================================== -->
+        <!-- TAB 4: CONVERSION & INCENTIVE PIPELINE -->
+        <!-- ============================================================== -->
+        <section id="tab-transition" class="tab-content hidden space-y-6">
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Incentive Budget Chart -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="text-center mb-3">
+                        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">Transition Incentive Budget (USD)</h2>
+                        <p class="text-xs text-slate-500 mt-1">40% of total production: <strong>200 KHR/kg</strong> (WF &amp; Ibis I) &bull; <strong>250 KHR/kg</strong> (Ibis II).</p>
+                    </div>
+                    <div class="relative h-72 w-full">
+                        <canvas id="chartIncentive"></canvas>
+                    </div>
+                </div>
+
+                <!-- 4-Harvest-Cycle Conversion Lifecycle Flow Explanation -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="text-center mb-3">
+                        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">4-Harvest-Cycle Conversion Pipeline</h2>
+                        <p class="text-xs text-slate-500 mt-1">Farmers register Feb–May and complete 4 harvest cycles for full organic certification.</p>
+                    </div>
+                    <div class="space-y-3 text-xs">
+                        <div class="flex items-start gap-3 p-3 bg-violet-50/60 rounded-lg border border-violet-200">
+                            <span class="w-6 h-6 rounded-full bg-violet-200 text-violet-800 font-bold flex items-center justify-center shrink-0">0</span>
+                            <div>
+                                <h4 class="font-bold text-violet-900">Year 0: Intake / Wildlife Friendly (WF)</h4>
+                                <p class="text-violet-800">Initial registration of ~500 new farmers annually (Jan–May), audit in Sept, first harvest in Nov. Paid <strong>200 KHR per kg ($0.0488/kg)</strong> on 40% of total production.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-3 p-3 bg-blue-50/60 rounded-lg border border-blue-200">
+                            <span class="w-6 h-6 rounded-full bg-blue-200 text-blue-800 font-bold flex items-center justify-center shrink-0">1</span>
+                            <div>
+                                <h4 class="font-bold text-blue-900">Transition Year 1 (Ibis I)</h4>
+                                <p class="text-blue-800">Second in-conversion harvest cycle. Paid <strong>200 KHR per kg ($0.0488/kg)</strong> conservation incentive on 40% of total farm production.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-3 p-3 bg-amber-50/60 rounded-lg border border-amber-200">
+                            <span class="w-6 h-6 rounded-full bg-amber-200 text-amber-800 font-bold flex items-center justify-center shrink-0">2</span>
+                            <div>
+                                <h4 class="font-bold text-amber-900">Transition Year 2 (Ibis II)</h4>
+                                <p class="text-amber-800">Third in-conversion harvest cycle. Paid <strong>250 KHR per kg ($0.0610/kg)</strong> conservation incentive on 40% of total farm production.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-3 p-3 bg-emerald-50/60 rounded-lg border border-emerald-200">
+                            <span class="w-6 h-6 rounded-full bg-emerald-200 text-emerald-800 font-bold flex items-center justify-center shrink-0">3+</span>
+                            <div>
+                                <h4 class="font-bold text-emerald-900">Cycle 4 (Year 3+): Fully Organic (Selling Paddy)</h4>
+                                <p class="text-emerald-800">Full 36-month certification achieved. Eligible to sell organic paddy to IRCC at guaranteed premium purchase prices.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transition & Incentive Schedule Table -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-900 mb-2">Transition Volume & Incentive Commitment Schedule (USD & KHR)</h3>
+                <div id="transitionTableContainer" class="overflow-x-auto custom-scrollbar border border-slate-200 rounded-lg">
+                    <!-- Injected by JavaScript -->
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 border-t border-slate-800 py-6 text-xs no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p>&copy; 2026 Ibis Rice Conservation Company (IRCC). All rights reserved. Confidential management asset. &bull; <button id="btnLogout" type="button" class="text-slate-300 hover:text-emerald-400 underline underline-offset-2 transition cursor-pointer">Sign Out</button></p>
+        </div>
+    </footer>
+    </div><!-- /#dashboardShell -->
+
+    <!-- Scripts -->
+    <!-- Embedded Data Fallback for direct local file viewing without web server -->
+    <script src="js/data.js"></script>
+    <!-- Application Logic -->
+    <script src="js/app.js"></script>
+</body>
+</html>
+
