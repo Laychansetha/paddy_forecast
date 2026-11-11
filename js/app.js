@@ -1,7 +1,6 @@
 // IRCC Long-Term Forecast Dashboard Application Logic
 
 let currentScenario = 'baseline';
-let currentUnitVolume = 'MT'; // 'MT' or 'kg'
 let currentUnitCurrency = 'USD'; // 'USD' or 'KHR'
 
 let charts = {};
@@ -102,7 +101,6 @@ function initAuth() {
     const loginScreen = document.getElementById('loginScreen');
     const dashboardShell = document.getElementById('dashboardShell');
     if (!loginScreen || !dashboardShell) {
-        // Fallback if login screen is absent
         initTabs();
         initControls();
         renderAll();
@@ -160,7 +158,6 @@ function initAuth() {
     }
 }
 
-// Wait for DOM to load
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
 });
@@ -180,7 +177,6 @@ function initTabs() {
             const targetEl = document.getElementById(target);
             if (targetEl) targetEl.classList.remove('hidden');
 
-            // Trigger chart resize on tab switch
             Object.values(charts).forEach(chart => {
                 if (chart) chart.resize();
             });
@@ -188,40 +184,34 @@ function initTabs() {
     });
 }
 
-// Controls (Scenario, Volume Unit, Currency Unit)
+// Controls & Table Exports
 function initControls() {
-    const scenarioSelect = document.getElementById('scenarioSelect');
-    if (scenarioSelect) {
-        scenarioSelect.addEventListener('change', (e) => {
-            currentScenario = e.target.value;
-            renderAll();
-        });
-    }
-
-    const unitVolumeSelect = document.getElementById('unitVolumeSelect');
-    if (unitVolumeSelect) {
-        unitVolumeSelect.addEventListener('change', (e) => {
-            currentUnitVolume = e.target.value;
-            renderAll();
-        });
-    }
-
-    const unitCurrencySelect = document.getElementById('unitCurrencySelect');
-    if (unitCurrencySelect) {
-        unitCurrencySelect.addEventListener('change', (e) => {
-            currentUnitCurrency = e.target.value;
-            renderAll();
-        });
-    }
-
     const btnExportCSV = document.getElementById('btnExportCSV');
     if (btnExportCSV) {
-        btnExportCSV.addEventListener('click', exportMasterTableCSV);
+        btnExportCSV.addEventListener('click', () => exportTableCSV('masterTableContainer', 'IRCC_Paddy_Purchase_Forecast_2026_2033.csv'));
     }
 
     const btnExportExcel = document.getElementById('btnExportExcel');
     if (btnExportExcel) {
-        btnExportExcel.addEventListener('click', exportMasterTableExcel);
+        btnExportExcel.addEventListener('click', () => exportTableExcel('masterTableContainer', {
+            filename: 'IRCC_Paddy_Purchase_Forecast_2026_2033.xls',
+            sheetName: 'Paddy Forecast 2026-2033',
+            sheetTitle: 'Ibis Rice Conservation Company (IRCC) — Paddy Purchase & Farmer Forecast (2026 - 2033)'
+        }));
+    }
+
+    const btnExportBreakdownCSV = document.getElementById('btnExportBreakdownCSV');
+    if (btnExportBreakdownCSV) {
+        btnExportBreakdownCSV.addEventListener('click', () => exportTableCSV('transitionBreakdownTableContainer', 'IRCC_Transition_Breakdown_By_Variety_2026_2033.csv'));
+    }
+
+    const btnExportBreakdownExcel = document.getElementById('btnExportBreakdownExcel');
+    if (btnExportBreakdownExcel) {
+        btnExportBreakdownExcel.addEventListener('click', () => exportTableExcel('transitionBreakdownTableContainer', {
+            filename: 'IRCC_Transition_Breakdown_By_Variety_2026_2033.xls',
+            sheetName: 'Transition by Variety 2026-2033',
+            sheetTitle: 'Ibis Rice Conservation Company (IRCC) — Transition Breakdown by Variety (Part 2 & Part 3, 2026 - 2033)'
+        }));
     }
 }
 
@@ -229,7 +219,7 @@ function initControls() {
 function renderAll() {
     const data = window.FORECAST_DATA;
     if (!data) {
-        console.error("Forecast data not loaded!");
+        console.error('Forecast data not loaded!');
         return;
     }
 
@@ -237,83 +227,59 @@ function renderAll() {
     const historicalData = data.historical;
 
     renderKPICards(scenarioData, data.meta);
-    renderCharts(scenarioData, historicalData, data.scenarios);
-    renderMasterTable(scenarioData);
-    renderHistoricalTable(historicalData);
+    renderCharts(scenarioData, historicalData, data.scenarios, data.meta);
+    renderMasterTable(scenarioData, data.meta);
+    renderTransitionBreakdownTable(scenarioData, historicalData, data.meta);
+    renderHistoricalTables(historicalData, data.meta);
     renderTransitionTable(scenarioData);
 }
 
-// 1. KPI Cards
-function renderKPICards(sc, meta) {
-    const years = sc.years;
-    const lastIdx = years.length - 1; // 2033
-    const baseIdx = 0; // 2026
-
-    // 2033 Total Organic Volume
+// 1. KPI Scorecards
+function renderKPICards(sc) {
+    const lastIdx = sc.years.length - 1;
     const vol2033 = Math.round(sc.part1_organic_purchases_mt.total[lastIdx]);
-    const vol2026 = Math.round(sc.part1_organic_purchases_mt.total[baseIdx]);
+    const vol2026 = Math.round(sc.part1_organic_purchases_mt.total[0]);
     const volGrowth = (((vol2033 - vol2026) / vol2026) * 100).toFixed(1);
+    const signVol = Number(volGrowth) >= 0 ? '↑ +' : '↓ ';
 
-    document.getElementById('kpiOrganicVol').textContent = currentUnitVolume === 'MT' ? `${vol2033.toLocaleString()} MT` : `${(vol2033 * 1000).toLocaleString()} kg`;
-    document.getElementById('kpiOrganicVolSub').textContent = `↑ +${volGrowth}% vs 2026 (${vol2026.toLocaleString()} MT)`;
+    document.getElementById('kpiOrganicVol').textContent = `${vol2033.toLocaleString()} MT`;
+    document.getElementById('kpiOrganicVolSub').textContent = `${signVol}${volGrowth}% vs 2026 (${vol2026.toLocaleString()} MT)`;
 
-    // 2033 Selling Farmers
-    const farmers2033 = sc.farmers.selling_paddy[lastIdx];
-    const farmers2026 = sc.farmers.selling_paddy[baseIdx];
-    const farmerGrowth = farmers2033 - farmers2026;
+    const elig2033 = sc.farmers.certified_organic_eligible[lastIdx];
+    const sell2033 = sc.farmers.selling_paddy[lastIdx];
+    const exSell2033 = sc.farmers.existing_organic_selling[lastIdx];
+    const grSell2033 = sc.farmers.graduated_organic_selling[lastIdx];
 
-    document.getElementById('kpiSellingFarmers').textContent = `${farmers2033.toLocaleString()} farmers`;
-    document.getElementById('kpiSellingFarmersSub').textContent = `↑ +${farmerGrowth.toLocaleString()} organic sellers net`;
+    document.getElementById('kpiSellingFarmers').textContent = `${elig2033.toLocaleString()} eligible`;
+    document.getElementById('kpiSellingFarmersSub').textContent = `${sell2033.toLocaleString()} sellers (${exSell2033.toLocaleString()} Existing + ${grSell2033.toLocaleString()} Grads)`;
 
-    // Steady State Transition Volume
     const transVol2033 = Math.round(sc.part2_transition_volumes_mt.combined_volume[lastIdx]);
-    const transFarmers2033 = sc.farmers.transition_yr0[lastIdx] + sc.farmers.transition_yr1[lastIdx] + sc.farmers.transition_yr2[lastIdx];
-    document.getElementById('kpiTransitionVol').textContent = currentUnitVolume === 'MT' ? `${transVol2033.toLocaleString()} MT/yr` : `${(transVol2033 * 1000).toLocaleString()} kg/yr`;
-    document.getElementById('kpiTransitionVolSub').textContent = `From ${transFarmers2033.toLocaleString()} in-conversion farmers (Yr 0, 1, 2)`;
+    const elig4Trans2033 = Math.round(sc.incentive_commitments.eligible4_base_volume_kg[lastIdx] / 1000);
+    const transFarmers2033 = sc.farmers.total_transition[lastIdx];
+    document.getElementById('kpiTransitionVol').textContent = `${transVol2033.toLocaleString()} MT / yr`;
+    document.getElementById('kpiTransitionVolSub').textContent = `${elig4Trans2033.toLocaleString()} MT eligible • ${transFarmers2033.toLocaleString()} farmers`;
 
-    // Steady State Incentive Budget
-    const incUsd2033 = sc.incentive_commitments.total_incentive_usd[lastIdx];
+    const incUsd2033 = Math.round(sc.incentive_commitments.total_incentive_usd[lastIdx]);
     const incKhr2033 = sc.incentive_commitments.total_incentive_khr[lastIdx];
-
-    if (currentUnitCurrency === 'USD') {
-        document.getElementById('kpiIncentive').textContent = `$${incUsd2033.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
-        document.getElementById('kpiIncentiveSub').textContent = `≈ ${(incKhr2033 / 1000000).toFixed(1)} Million KHR/yr`;
-    } else {
-        document.getElementById('kpiIncentive').textContent = `${(incKhr2033 / 1000000).toFixed(1)}M KHR`;
-        document.getElementById('kpiIncentiveSub').textContent = `≈ $${incUsd2033.toLocaleString()} USD/yr`;
-    }
+    document.getElementById('kpiIncentive').textContent = `$${incUsd2033.toLocaleString()}`;
+    document.getElementById('kpiIncentiveSub').textContent = `≈ ${(incKhr2033 / 1000000).toFixed(1)} Million KHR (@ 4,100 KHR/$)`;
 }
 
 // 2. Charts Rendering
-function renderCharts(sc, hist, allScenarios) {
-    const isMT = currentUnitVolume === 'MT';
-    const mult = isMT ? 1 : 1000;
-    const volUnit = isMT ? 'MT' : 'kg';
+function renderCharts(sc, hist, allScenarios, meta) {
+    const hYears = hist.years; // [2022..2026]
+    const fYears = sc.years.slice(1); // [2027..2033]
 
-    // Chart A1: Historical Actuals (2022-2025) + Forecast Trajectory (2026 Near-Term + 2027-2033)
-    const histYears = hist.years.slice(0, 4).map(String); // 2022-2025 actuals only
-    const fcYears = sc.years.map(String); // 2026-2033 forecast
-    const combinedYears = [...histYears, ...fcYears]; // 2022 to 2033
+    // Chart A1: Actuals (2022–2025) + Forecast Zone (2026–2033)
+    const combinedYears = [...hYears.map(String), ...fYears.map(String)];
+    const getHistVarMT = (vk) => hYears.map(y => hist.organic_sales[String(y)].actual_kg[vk] / 1000);
+    const getProjVarMT = (vk) => sc.part1_organic_purchases_kg[vk].slice(1).map(v => v / 1000);
 
-    // Build historical values (2022-2025 actuals)
-    const histPR = hist.volumes_actual_kg.phka_rumduol.slice(0, 4).map(v => isMT ? v / 1000 : v);
-    const histWR = hist.volumes_actual_kg.white_rice.slice(0, 4).map(v => isMT ? v / 1000 : v);
-    const histRJ = hist.volumes_actual_kg.red_jasmine.slice(0, 4).map(v => isMT ? v / 1000 : v);
-    const histSD = hist.volumes_actual_kg.seed.slice(0, 4).map(v => isMT ? v / 1000 : v);
+    const fullPR = [...getHistVarMT('phka_rumduol'), ...getProjVarMT('phka_rumduol')];
+    const fullWR = [...getHistVarMT('white_rice'), ...getProjVarMT('white_rice')];
+    const fullRJ = [...getHistVarMT('red_jasmine'), ...getProjVarMT('red_jasmine')];
+    const fullSD = [...getHistVarMT('seed'), ...getProjVarMT('seed')];
 
-    // Build forecast values (2026-2033)
-    const fcPR = sc.part1_organic_purchases_mt.phka_rumduol.map(v => isMT ? v : v * 1000);
-    const fcWR = sc.part1_organic_purchases_mt.white_rice.map(v => isMT ? v : v * 1000);
-    const fcRJ = sc.part1_organic_purchases_mt.red_jasmine.map(v => isMT ? v : v * 1000);
-    const fcSD = sc.part1_organic_purchases_mt.seed.map(v => isMT ? v : v * 1000);
-
-    // Merge datasets (2022-2025 actuals + 2026-2033 forecast)
-    const fullPR = [...histPR, ...fcPR];
-    const fullWR = [...histWR, ...fcWR];
-    const fullRJ = [...histRJ, ...fcRJ];
-    const fullSD = [...histSD, ...fcSD];
-
-    // Custom plugin: subtle shading & vertical divider between 2025 Actuals and 2026-2033 Forecast
     const forecastDividerPlugin = {
         id: 'forecastDivider',
         beforeDatasetsDraw(chart) {
@@ -321,10 +287,8 @@ function renderCharts(sc, hist, allScenarios) {
             if (!chartArea || !scales.x) return;
             const splitX = (scales.x.getPixelForValue(3) + scales.x.getPixelForValue(4)) / 2;
             ctx.save();
-            // Subtle green tint over forecast zone (2026-2033)
             ctx.fillStyle = 'rgba(16, 185, 129, 0.045)';
             ctx.fillRect(splitX, chartArea.top, chartArea.right - splitX, chartArea.bottom - chartArea.top);
-            // Vertical dashed separator
             ctx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
             ctx.lineWidth = 1.25;
             ctx.setLineDash([4, 4]);
@@ -332,15 +296,32 @@ function renderCharts(sc, hist, allScenarios) {
             ctx.moveTo(splitX, chartArea.top);
             ctx.lineTo(splitX, chartArea.bottom);
             ctx.stroke();
-            // Crisp labels
             ctx.setLineDash([]);
-            ctx.font = '600 10px Inter, system-ui, sans-serif';
-            ctx.fillStyle = '#64748b';
+            ctx.font = '700 10px Inter, system-ui, sans-serif';
+            ctx.fillStyle = '#475569';
             ctx.textAlign = 'right';
-            ctx.fillText('Actuals', splitX - 6, chartArea.top + 12);
+            ctx.fillText('Actuals (2022–2025)', splitX - 8, chartArea.top + 11);
             ctx.fillStyle = '#059669';
             ctx.textAlign = 'left';
-            ctx.fillText('Forecast →', splitX + 6, chartArea.top + 12);
+            ctx.fillText('Forecast (2026–2033) →', splitX + 8, chartArea.top + 11);
+            ctx.restore();
+        },
+        afterDatasetsDraw(chart) {
+            const { ctx, scales } = chart;
+            const topMeta = chart.getDatasetMeta(3);
+            if (!topMeta || !topMeta.data || !scales.y) return;
+            ctx.save();
+            ctx.font = '700 9.5px Inter, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#1e293b';
+            topMeta.data.forEach((bar, idx) => {
+                let visTot = 0;
+                chart.data.datasets.forEach((ds, dsIdx) => {
+                    if (chart.isDatasetVisible(dsIdx)) visTot += (ds.data[idx] || 0);
+                });
+                const yTop = scales.y.getPixelForValue(visTot);
+                ctx.fillText(Math.round(visTot).toLocaleString(), bar.x, yTop - 6);
+            });
             ctx.restore();
         }
     };
@@ -353,10 +334,10 @@ function renderCharts(sc, hist, allScenarios) {
             data: {
                 labels: combinedYears,
                 datasets: [
-                    { label: 'Phka Rumduol', data: fullPR, backgroundColor: '#059669', borderRadius: 2, barPercentage: 0.72, categoryPercentage: 0.84 },
-                    { label: 'White Rice', data: fullWR, backgroundColor: '#0ea5e9', borderRadius: 2, barPercentage: 0.72, categoryPercentage: 0.84 },
-                    { label: 'Red Jasmine', data: fullRJ, backgroundColor: '#e11d48', borderRadius: 2, barPercentage: 0.72, categoryPercentage: 0.84 },
-                    { label: 'Seed', data: fullSD, backgroundColor: '#f59e0b', borderRadius: { topLeft: 4, topRight: 4 }, barPercentage: 0.72, categoryPercentage: 0.84 }
+                    { label: 'Phka Rumduol', data: fullPR, backgroundColor: '#059669', borderColor: '#ffffff', borderWidth: 1, borderRadius: 2, barPercentage: 0.68, categoryPercentage: 0.84 },
+                    { label: 'White Rice', data: fullWR, backgroundColor: '#0ea5e9', borderColor: '#ffffff', borderWidth: 1, borderRadius: 2, barPercentage: 0.68, categoryPercentage: 0.84 },
+                    { label: 'Red Jasmine', data: fullRJ, backgroundColor: '#e11d48', borderColor: '#ffffff', borderWidth: 1, borderRadius: 2, barPercentage: 0.68, categoryPercentage: 0.84 },
+                    { label: 'Seed', data: fullSD, backgroundColor: '#f59e0b', borderColor: '#ffffff', borderWidth: 1, borderRadius: { topLeft: 5, topRight: 5 }, barPercentage: 0.68, categoryPercentage: 0.84 }
                 ]
             },
             plugins: [forecastDividerPlugin],
@@ -365,13 +346,15 @@ function renderCharts(sc, hist, allScenarios) {
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 scales: {
-                    x: { stacked: true, grid: { display: false }, border: { display: false }, ticks: { font: { size: 11 }, color: '#475569' } },
+                    x: { stacked: true, grid: { display: false }, border: { display: false }, ticks: { font: { size: 10.5, weight: '600' }, color: '#475569' } },
                     y: {
                         stacked: true,
+                        min: 0,
+                        max: 5000,
                         border: { display: false },
                         grid: { color: 'rgba(148, 163, 184, 0.16)' },
-                        title: { display: true, text: `Volume (${volUnit})`, font: { size: 11, weight: '600' }, color: '#64748b' },
-                        ticks: { callback: v => v.toLocaleString(), font: { size: 11 }, color: '#64748b' }
+                        title: { display: true, text: 'Volume (MT)', font: { size: 11, weight: '600' }, color: '#64748b' },
+                        ticks: { stepSize: 1000, callback: v => v.toLocaleString(), font: { size: 11 }, color: '#64748b' }
                     }
                 },
                 plugins: {
@@ -380,15 +363,10 @@ function renderCharts(sc, hist, allScenarios) {
                         padding: 10,
                         cornerRadius: 8,
                         callbacks: {
-                            afterTitle: (items) => {
-                                const yr = Number(items[0].label);
-                                if (yr <= 2025) return 'Historical Actuals (2022–2025)';
-                                if (yr === 2026) return '2026 Near-Term Forecast (Near Purchase)';
-                                return 'Projected Forecast (2027–2033)';
-                            },
+                            label: (ctx) => ` ${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString()} MT`,
                             footer: (items) => {
                                 const sum = items.reduce((acc, it) => acc + (it.parsed.y || 0), 0);
-                                return `Total: ${sum.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${volUnit}`;
+                                return `Total: ${Math.round(sum).toLocaleString()} MT`;
                             }
                         }
                     },
@@ -401,18 +379,18 @@ function renderCharts(sc, hist, allScenarios) {
         });
     }
 
-    // Chart A2: Farmer Pipeline Chart (Sleek smooth lines + soft gradient + concise labels)
+    // Chart A2: Farmer Supply Cohorts & Transition Pipeline (5 clean monotone smooth curves + breathing room)
     if (charts.farmerPipeline) charts.farmerPipeline.destroy();
     const ctxFarmers = document.getElementById('chartFarmerPipeline');
     if (ctxFarmers) {
         const ctx2d = ctxFarmers.getContext('2d');
-        const orgGrad = ctx2d.createLinearGradient(0, 0, 0, 280);
-        orgGrad.addColorStop(0, 'rgba(5, 150, 105, 0.16)');
-        orgGrad.addColorStop(1, 'rgba(5, 150, 105, 0.0)');
-
-        const totGrad = ctx2d.createLinearGradient(0, 0, 0, 280);
-        totGrad.addColorStop(0, 'rgba(225, 29, 72, 0.08)');
+        const totGrad = ctx2d.createLinearGradient(0, 0, 0, 300);
+        totGrad.addColorStop(0, 'rgba(225, 29, 72, 0.09)');
         totGrad.addColorStop(1, 'rgba(225, 29, 72, 0.0)');
+
+        const orgGrad = ctx2d.createLinearGradient(0, 0, 0, 300);
+        orgGrad.addColorStop(0, 'rgba(5, 150, 105, 0.14)');
+        orgGrad.addColorStop(1, 'rgba(5, 150, 105, 0.0)');
 
         charts.farmerPipeline = new Chart(ctxFarmers, {
             type: 'line',
@@ -421,12 +399,13 @@ function renderCharts(sc, hist, allScenarios) {
                 datasets: [
                     {
                         label: 'Total Active',
-                        data: sc.farmers.total_active_farmers_incl_nonsell,
+                        data: sc.farmers.total_active,
                         borderColor: '#e11d48',
                         backgroundColor: totGrad,
                         borderWidth: 2.75,
                         fill: true,
-                        tension: 0.35,
+                        cubicInterpolationMode: 'monotone',
+                        tension: 0.4,
                         pointRadius: 3.5,
                         pointHoverRadius: 6.5,
                         pointHitRadius: 14,
@@ -435,13 +414,14 @@ function renderCharts(sc, hist, allScenarios) {
                         pointBorderWidth: 1.5
                     },
                     {
-                        label: 'Organic',
-                        data: sc.farmers.selling_paddy,
+                        label: 'Organic (Eligible)',
+                        data: sc.farmers.certified_organic_eligible,
                         borderColor: '#059669',
                         backgroundColor: orgGrad,
                         borderWidth: 2.75,
                         fill: true,
-                        tension: 0.35,
+                        cubicInterpolationMode: 'monotone',
+                        tension: 0.4,
                         pointRadius: 3.5,
                         pointHoverRadius: 6,
                         pointHitRadius: 12,
@@ -456,7 +436,8 @@ function renderCharts(sc, hist, allScenarios) {
                         backgroundColor: '#7c3aed',
                         borderWidth: 2.2,
                         fill: false,
-                        tension: 0.35,
+                        cubicInterpolationMode: 'monotone',
+                        tension: 0.4,
                         pointRadius: 3,
                         pointHoverRadius: 5.5,
                         pointHitRadius: 12,
@@ -471,7 +452,8 @@ function renderCharts(sc, hist, allScenarios) {
                         backgroundColor: '#0284c7',
                         borderWidth: 2.2,
                         fill: false,
-                        tension: 0.35,
+                        cubicInterpolationMode: 'monotone',
+                        tension: 0.4,
                         pointRadius: 3,
                         pointHoverRadius: 5.5,
                         pointHitRadius: 12,
@@ -486,7 +468,8 @@ function renderCharts(sc, hist, allScenarios) {
                         backgroundColor: '#d97706',
                         borderWidth: 2.2,
                         fill: false,
-                        tension: 0.35,
+                        cubicInterpolationMode: 'monotone',
+                        tension: 0.4,
                         pointRadius: 3,
                         pointHoverRadius: 5.5,
                         pointHitRadius: 12,
@@ -499,16 +482,17 @@ function renderCharts(sc, hist, allScenarios) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: { padding: { top: 8, right: 10, bottom: 4, left: 2 } },
                 interaction: { mode: 'nearest', intersect: true },
                 scales: {
-                    x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11 }, color: '#475569' } },
+                    x: { grid: { display: false }, border: { display: false }, ticks: { padding: 8, font: { size: 11, weight: '600' }, color: '#475569' } },
                     y: {
                         min: 0,
-                        suggestedMax: 3500,
+                        max: sc.farmers.total_active[sc.farmers.total_active.length - 1] > 3500 ? undefined : 3500,
                         border: { display: false },
                         grid: { color: 'rgba(148, 163, 184, 0.16)' },
                         title: { display: true, text: 'Farmers', font: { size: 11, weight: '600' }, color: '#64748b' },
-                        ticks: { stepSize: 500, callback: v => v.toLocaleString(), font: { size: 11 }, color: '#64748b' }
+                        ticks: { stepSize: 500, padding: 8, callback: v => v.toLocaleString(), font: { size: 11 }, color: '#64748b' }
                     }
                 },
                 plugins: {
@@ -525,19 +509,16 @@ function renderCharts(sc, hist, allScenarios) {
                             afterBody: (items) => {
                                 if (!items.length || items[0].datasetIndex !== 0) return [];
                                 const i = items[0].dataIndex;
-                                const tot = sc.farmers.total_active_farmers_incl_nonsell[i];
-                                const org = sc.farmers.selling_paddy[i];
+                                const ex = sc.farmers.existing_organic_eligible[i];
+                                const gr = sc.farmers.graduated_organic_eligible_pool[i];
+                                const sell = sc.farmers.selling_paddy[i];
                                 const wf = sc.farmers.transition_yr0[i];
                                 const y1 = sc.farmers.transition_yr1[i];
                                 const y2 = sc.farmers.transition_yr2[i];
-                                const nonSell = tot - (org + wf + y1 + y2);
-                                const lines = [
-                                    `  • Organic (Selling): ${org.toLocaleString()}`,
-                                    `  • WF: ${wf.toLocaleString()}  |  Ibis I: ${y1.toLocaleString()}  |  Ibis II: ${y2.toLocaleString()}`,
-                                    `  • Organic (Non-selling): ${nonSell.toLocaleString()}`
+                                return [
+                                    `  • Certified Organic = ${ex.toLocaleString()} Existing + ${gr.toLocaleString()} Graduated Pool`,
+                                    `  • Est. Sellers: ${sell.toLocaleString()} | WF: ${wf} | Ibis I: ${y1} | Ibis II: ${y2}`
                                 ];
-                                if (i === 0) lines.push('  (AFL 2026 active base; excludes 336 NC)');
-                                return lines;
                             }
                         }
                     }
@@ -546,12 +527,14 @@ function renderCharts(sc, hist, allScenarios) {
         });
     }
 
-    // Chart B1: Realization Rate History (Gradients + Direct % Labels + 80% Threshold Tag)
+    // Chart B1: Organic Realization Rate History (4 Eligible Varieties ONLY)
     if (charts.realization) charts.realization.destroy();
     const ctxReal = document.getElementById('chartRealization');
     if (ctxReal) {
-        const actMT = hist.volumes_actual_kg.total.map(v => Math.round(v / 1000).toLocaleString());
-        const estMT = hist.volumes_estimated_kg.total.map(v => Math.round(v / 1000).toLocaleString());
+        const realRates = hYears.map(y => Number(hist.organic_sales[String(y)].realization_eligible4_pct.toFixed(1)));
+        const avgSimple = Number(meta.historical_summary.simple_5yr_realization_pct.toFixed(1));
+        const actMT = hYears.map(y => Math.round(hist.organic_sales[String(y)].actual_kg.eligible4_total / 1000).toLocaleString());
+        const estMT = hYears.map(y => Math.round(hist.organic_sales[String(y)].expected_kg.eligible4_total / 1000).toLocaleString());
 
         const r2d = ctxReal.getContext('2d');
         const gActual = r2d.createLinearGradient(0, 40, 0, 250);
@@ -579,17 +562,16 @@ function renderCharts(sc, hist, allScenarios) {
             },
             afterDatasetsDraw(chart) {
                 const { ctx, chartArea, scales } = chart;
-                const meta = chart.getDatasetMeta(0);
-                if (!meta || !meta.data) return;
+                const metaSet = chart.getDatasetMeta(0);
+                if (!metaSet || !metaSet.data) return;
                 ctx.save();
                 ctx.font = '700 11px Inter, system-ui, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillStyle = '#ffffff';
-                meta.data.forEach((bar, idx) => {
+                metaSet.data.forEach((bar, idx) => {
                     const val = chart.data.datasets[0].data[idx];
                     ctx.fillText(`${val}%`, bar.x, bar.y + 18);
                 });
-                // Crisp tag above thin 80% line
                 if (scales.y) {
                     const y80 = scales.y.getPixelForValue(80);
                     ctx.font = '600 10px Inter, system-ui, sans-serif';
@@ -604,11 +586,11 @@ function renderCharts(sc, hist, allScenarios) {
         charts.realization = new Chart(ctxReal, {
             type: 'bar',
             data: {
-                labels: ['2022', '2023', '2024', '2025', '2026*', '5-Yr Avg'],
+                labels: [...hYears.map(String), '5-Yr Avg'],
                 datasets: [
                     {
                         label: 'Actual % Delivered',
-                        data: [76.5, 76.1, 66.7, 67.8, 69.8, 71.4],
+                        data: [...realRates, avgSimple],
                         backgroundColor: [gActual, gActual, gActual, gActual, gNear, gAvg],
                         borderRadius: { topLeft: 7, topRight: 7 },
                         barPercentage: 0.56,
@@ -661,7 +643,7 @@ function renderCharts(sc, hist, allScenarios) {
         });
     }
 
-    // Chart B2: Multi-Year Incentive Commitments (Stacked by Stage: WF, Ibis I, Ibis II)
+    // Chart B2: Eligible Transition Incentive Commitments (Sticky Rice Excluded)
     if (charts.incentive) charts.incentive.destroy();
     const ctxInc = document.getElementById('chartIncentive');
     if (ctxInc) {
@@ -712,7 +694,7 @@ function renderCharts(sc, hist, allScenarios) {
                     x: { stacked: true, grid: { display: false }, border: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: '#475569' } },
                     y: {
                         stacked: true,
-                        suggestedMax: isUSD ? 128000 : 530,
+                        suggestedMax: isUSD ? 140000 : 560,
                         border: { display: false },
                         grid: { color: 'rgba(148, 163, 184, 0.16)' },
                         title: { display: true, text: isUSD ? 'Budget ($ USD)' : 'Budget (Million KHR)', font: { size: 11, weight: '600' }, color: '#64748b' },
@@ -729,7 +711,7 @@ function renderCharts(sc, hist, allScenarios) {
                             label: (ctx) => isUSD ? ` ${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}` : ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}M KHR`,
                             footer: (items) => {
                                 const tot = items.reduce((acc, it) => acc + (it.parsed.y || 0), 0);
-                                return isUSD ? `Total: $${tot.toLocaleString()} USD` : `Total: ${tot.toLocaleString()} Million KHR`;
+                                return isUSD ? `Total (Sticky Rice Excluded): $${tot.toLocaleString()} USD` : `Total: ${tot.toLocaleString()} Million KHR`;
                             }
                         }
                     }
@@ -738,7 +720,7 @@ function renderCharts(sc, hist, allScenarios) {
         });
     }
 
-    // Chart C1: Scenario Comparison Chart (Total Organic MT across Baseline, Conservative, Optimistic)
+    // Chart C1: Scenario Sensitivity Chart
     if (charts.scenarios) charts.scenarios.destroy();
     const ctxScen = document.getElementById('chartScenarios');
     if (ctxScen) {
@@ -747,9 +729,9 @@ function renderCharts(sc, hist, allScenarios) {
             data: {
                 labels: sc.years.map(String),
                 datasets: [
-                    { label: 'Best Case (650 new/yr, 8.5% NC)', data: allScenarios.optimistic.part1_organic_purchases_mt.total, borderColor: '#059669', backgroundColor: '#059669', borderWidth: 2.5, tension: 0.35, pointRadius: 3.5, pointHoverRadius: 6, pointBorderColor: '#fff', pointBorderWidth: 1.5 },
-                    { label: 'Main Plan (500 new/yr, 11.59% NC)', data: allScenarios.baseline.part1_organic_purchases_mt.total, borderColor: '#0284c7', backgroundColor: '#0284c7', borderWidth: 3, tension: 0.35, pointRadius: 3.5, pointHoverRadius: 6, pointBorderColor: '#fff', pointBorderWidth: 1.5 },
-                    { label: 'Risk Case (400 new/yr, 14.82% NC)', data: allScenarios.conservative.part1_organic_purchases_mt.total, borderColor: '#e11d48', backgroundColor: '#e11d48', borderWidth: 2.5, tension: 0.35, pointRadius: 3.5, pointHoverRadius: 6, pointBorderColor: '#fff', pointBorderWidth: 1.5 }
+                    { label: 'Best Case (650 new/yr, 9.0% NC)', data: allScenarios.optimistic.part1_organic_purchases_mt.total.map(v => Math.round(v)), borderColor: '#059669', backgroundColor: '#059669', borderWidth: 2.5, tension: 0.35, pointRadius: 3.5, pointHoverRadius: 6, pointBorderColor: '#fff', pointBorderWidth: 1.5 },
+                    { label: 'Main Plan (500 new/yr, 11.59% NC)', data: allScenarios.baseline.part1_organic_purchases_mt.total.map(v => Math.round(v)), borderColor: '#0284c7', backgroundColor: '#0284c7', borderWidth: 3, tension: 0.35, pointRadius: 3.5, pointHoverRadius: 6, pointBorderColor: '#fff', pointBorderWidth: 1.5 },
+                    { label: 'Risk Case (400 new/yr, 15.13% NC)', data: allScenarios.conservative.part1_organic_purchases_mt.total.map(v => Math.round(v)), borderColor: '#e11d48', backgroundColor: '#e11d48', borderWidth: 2.5, tension: 0.35, pointRadius: 3.5, pointHoverRadius: 6, pointBorderColor: '#fff', pointBorderWidth: 1.5 }
                 ]
             },
             options: {
@@ -762,268 +744,225 @@ function renderCharts(sc, hist, allScenarios) {
                 },
                 plugins: {
                     legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 14, font: { size: 11, weight: '500' }, color: '#334155' } },
-                    tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.94)', padding: 10, cornerRadius: 8 }
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.94)',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: (ctx) => ` ${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString()} MT`
+                        }
+                    }
                 }
             }
         });
     }
 }
 
-// 3. Render Master Table (Long Term Forecast 2026-2033)
-function renderMasterTable(sc) {
+// Shared helpers for executive forecast tables (Master + Transition Variety Breakdown)
+function escAttr(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function allocateExactByWeights(totalInt, weightsPct) {
+    const raw = weightsPct.map(w => totalInt * (w / 100));
+    const floored = raw.map(v => Math.floor(v));
+    let remainder = totalInt - floored.reduce((a, b) => a + b, 0);
+    const order = raw
+        .map((v, idx) => ({ idx, frac: v - floored[idx] }))
+        .sort((a, b) => b.frac - a.frac);
+    for (let i = 0; i < order.length && remainder > 0; i++) {
+        floored[order[i].idx] += 1;
+        remainder -= 1;
+    }
+    return floored;
+}
+
+function createForecastTableHelpers(years, titleLeft, opts = {}) {
+    const compact = Boolean(opts.compact);
+    const cellPad = compact ? 'px-3 py-1' : 'px-4 py-2.5';
+    const secPad = compact ? 'px-4 py-1.5' : 'px-5 py-2.5';
+    const lblPad = compact ? 'pl-8 pr-3 py-1 font-medium text-slate-700' : 'pl-9 pr-5 py-2.5 font-medium text-slate-700';
+    const headPadLeft = compact ? 'px-4 py-2.5' : 'px-5 py-3.5';
+    const headPadYr = compact ? 'px-3 py-2.5 text-[13.5px]' : 'px-4 py-3.5 text-[15px]';
+
+    const formulaCell = (valStr, title, calc, roundFormula, whyText, extraClass = '') => `
+        <td class="${cellPad} text-right tabular-nums cursor-help hover:bg-emerald-100/70 hover:text-emerald-950 transition-colors ${extraClass}"
+            data-ftitle="${escAttr(title)}"
+            data-fcalc="${escAttr(calc)}"
+            data-fexcel="${escAttr(roundFormula)}"
+            data-fwhy="${escAttr(whyText)}">${valStr}</td>`;
+
+    const sectionRow = (label, pillColor, rowBg, textColor, borderCls) => `
+        <tr class="${rowBg} ${borderCls}">
+            <td colspan="${years.length + 1}" class="${secPad}">
+                <div class="flex items-center gap-2 ${textColor} ${compact ? 'text-[11.5px]' : 'text-[12.5px]'} font-bold uppercase tracking-wider">
+                    <span class="inline-block w-1.5 ${compact ? 'h-3.5' : 'h-4'} rounded-full ${pillColor} shrink-0"></span>
+                    <span>${label}</span>
+                </div>
+            </td>
+        </tr>`;
+
+    const labelCell = (text, dotColor = null, rowBg = 'bg-white group-hover:bg-slate-50', extraCls = lblPad) => `
+        <td class="sticky left-0 z-10 ${rowBg} ${extraCls} whitespace-nowrap border-r border-slate-200/70 transition-colors">
+            <div class="flex items-center gap-2">
+                ${dotColor ? `<span class="inline-block w-1.5 h-1.5 rounded-full shrink-0" style="background-color:${dotColor}"></span>` : ''}
+                <span>${text}</span>
+            </div>
+        </td>`;
+
+    const tableHead = `
+        <thead class="bg-slate-100/95 text-slate-700 border-b-2 border-slate-200">
+            <tr>
+                <th class="sticky left-0 z-10 bg-slate-100 ${headPadLeft} text-xs font-bold uppercase tracking-wider text-slate-600 border-r border-slate-200/80 min-w-[240px]">${titleLeft}</th>
+                ${years.map((y, idx) => `<th class="${headPadYr} text-right font-bold tracking-tight min-w-[72px] ${idx === 0 ? 'bg-sky-50/80 text-sky-950 border-r border-slate-200/80' : 'text-slate-800'}">${y}</th>`).join('')}
+            </tr>
+        </thead>`;
+
+    return { formulaCell, sectionRow, labelCell, tableHead };
+}
+
+// 3. Master Forecast Table (Two-Component Supply + 2022–2026 Variety Mix)
+function renderMasterTable(sc, meta) {
     const years = sc.years;
-    const excelCols = ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-    const isMT = currentUnitVolume === 'MT';
-    const unit = isMT ? 'MT' : 'kg';
-    const ncPct = (sc.parameters.nc_rate * 100).toFixed(2);
-    const retPct = ((1 - sc.parameters.nc_rate) * 100).toFixed(2);
-    const intake = sc.parameters.new_intake_yr0;
+    const unit = 'MT';
+    const ncPct = sc.parameters.nc_rate_pct.toFixed(2);
+    const retPct = sc.parameters.retention_rate_pct.toFixed(2);
+    const intake = sc.parameters.annual_new_intake;
+    const shares5yr = meta.variety_shares_pct.part1_organic_2022_2026_eligible4;
 
     const fmtVol = (v) => Math.round(v).toLocaleString();
-    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
     const p1Kg = sc.part1_organic_purchases_kg;
     const p1Mt = sc.part1_organic_purchases_mt;
-    const p2Kg = sc.part2_transition_volumes_kg;
+    const cmp = sc.part1_supply_components;
     const p2Mt = sc.part2_transition_volumes_mt;
     const f = sc.farmers;
 
-    const formulaCell = (valStr, title, calc, roundFormula, whyText, extraClass = '') => `
-        <td class="px-3 py-1.5 text-right cursor-help hover:bg-emerald-100/60 transition-colors ${extraClass}"
-            data-ftitle="${esc(title)}"
-            data-fcalc="${esc(calc)}"
-            data-fexcel="${esc(roundFormula)}"
-            data-fwhy="${esc(whyText)}">
-            <span class="border-b border-dotted border-slate-300">${valStr}</span>
-        </td>`;
+    const { formulaCell, sectionRow, labelCell, tableHead } = createForecastTableHelpers(years, `Section / Metric (${sc.label})`);
 
-    const buildVarietyCells = (label, key, sharePct) => {
-        const arr = isMT ? p1Mt[key] : p1Kg[key];
-        const kgPerSeller = (p1Kg[key][0] / f.selling_paddy[0]).toFixed(2);
+    const buildVarietyCells = (label, key) => {
+        const arr = p1Mt[key];
+        const sharePct = shares5yr[key].toFixed(2);
         return arr.map((v, idx) => {
             const yr = years[idx];
             if (idx === 0) {
                 return formulaCell(
                     fmtVol(v),
-                    `${label} • ${yr}`,
-                    `2026 Near-Term Plan: ${Math.round(isMT ? p1Mt[key][0] : p1Kg[key][0]).toLocaleString()} ${unit} (${kgPerSeller} kg × 1,700 sellers)`,
-                    `2026 Baseline = ROUND(${(isMT ? p1Mt[key][0] : p1Kg[key][0]).toLocaleString()}, 0)`,
-                    `Why: Uses 2026 purchase plan & stable ${sharePct}% variety mix (farmers sell ~48.4% of harvest and keep ~51.6% for consumption).`
+                    `Part 1 • ${label} • 2026 (Actual)`,
+                    `2026 Audited Actual: ${p1Kg[key][0].toLocaleString()} kg (${Math.round(v).toLocaleString()} MT)`,
+                    `= 2026 Audited Actual [${label}]`,
+                    `Why: Audited 2026 actual sales (Sticky Rice completely excluded).`,
+                    'bg-slate-50/70 border-r border-slate-200/80 font-medium text-slate-800'
                 );
             }
-            const sellers = f.selling_paddy[idx];
-            const calc = isMT
-                ? `${sellers.toLocaleString()} Selling Paddy farmers × ${kgPerSeller} kg/farmer ÷ 1,000 = ${fmtVol(v)} MT`
-                : `${sellers.toLocaleString()} Selling Paddy farmers × ${kgPerSeller} kg/farmer = ${fmtVol(v)} kg`;
-            const roundFormula = isMT
-                ? `=ROUND( Part 3 [Selling Paddy] × (2026 ${label} ÷ 2026 Selling Paddy) ÷ 1,000, 0 )`
-                : `=ROUND( Part 3 [Selling Paddy] × (2026 ${label} ÷ 2026 Selling Paddy), 0 )`;
-            const whyText = `Why: Only certified organic sellers deliver organic paddy; keeps stable ${sharePct}% ${label} mix and 48.4% sold share.`;
-            return formulaCell(fmtVol(v), `${label} • ${yr}`, calc, roundFormula, whyText);
+            const totMT = fmtVol(p1Mt.total[idx]);
+            return formulaCell(
+                fmtVol(v),
+                `Part 1 • ${label} • ${yr} (Projected)`,
+                `${totMT} MT × ${sharePct}% (2022–2026 share) = ${fmtVol(v)} MT`,
+                `=ROUND( (Comp A + Comp B) × ${sharePct}%, 0 )`,
+                `Why: Distributes combined Existing + Newly Certified supply using the 2022–2026 4-variety baseline (${sharePct}%; Sticky Rice excluded).`,
+                'text-slate-700'
+            );
         }).join('');
     };
 
-    const buildPart2Cells = (label, stageShort, key, fKey, aflLabel) => {
-        const arr = isMT ? p2Mt[key] : p2Kg[key];
+    const buildPart2Cells = (label, stageShort, key, fKey) => {
+        const arr = p2Mt[key];
         return arr.map((v, idx) => {
             const yr = years[idx];
+            const cnt = f[fKey][idx];
             if (idx === 0) {
                 return formulaCell(
                     fmtVol(v),
-                    `${label} • ${yr}`,
-                    `2026 AFL ${aflLabel} estimate: ${Math.round(isMT ? p2Mt[key][0] : p2Kg[key][0]).toLocaleString()} ${unit} across ${f[fKey][0].toLocaleString()} ${stageShort} farmers`,
-                    `=ROUND( 2026 AFL [${stageShort} Estimate], 0 )`,
-                    `Why: Tracks conversion harvest volume separately from organic purchases to budget 40% transition incentives.`
+                    `${label} • 2026 (Allocated Actual)`,
+                    `2,614.4 MT × (${cnt} / 757 farmers) = ${fmtVol(v)} MT`,
+                    `=ROUND( 2026 Col J × (${cnt} ÷ 757), 0 )`,
+                    `Why: Tracks all 5 varieties produced (incl. Sticky Rice) for harvest analysis; Sticky Rice is excluded before calculating incentives.`,
+                    'bg-slate-50/70 border-r border-slate-200/80 font-medium text-slate-800'
                 );
             }
-            const cnt = f[fKey][idx];
-            const calc = isMT
-                ? `${cnt.toLocaleString()} ${stageShort} farmers × 4,420 kg (2.6 Ha × 1.7 MT/Ha) ÷ 1,000 = ${fmtVol(v)} MT`
-                : `${cnt.toLocaleString()} ${stageShort} farmers × 4,420 kg (2.6 Ha × 1.7 MT/Ha) = ${fmtVol(v)} kg`;
-            const roundFormula = isMT
-                ? `=ROUND( Part 3 [${stageShort}] × (2.6 Ha × 1.7 MT/Ha), 0 )`
-                : `=ROUND( Part 3 [${stageShort}] × 4,420 kg, 0 )`;
-            const whyText = `Why: Transition incentives pay 40% of total farm production (not purchased paddy), based on 2.6 Ha × 1.7 MT/Ha.`;
-            return formulaCell(fmtVol(v), `${label} • ${yr}`, calc, roundFormula, whyText);
+            const calc = `${cnt.toLocaleString()} ${stageShort} × 4,420 kg ÷ 1,000 = ${fmtVol(v)} MT`;
+            return formulaCell(
+                fmtVol(v),
+                `${label} • ${yr} (Projected)`,
+                calc,
+                `=ROUND( Farmers[${stageShort}] × 4,420 kg ÷ 1,000, 0 )`,
+                `Why: Total crop produced across all 5 varieties (incl. Sticky Rice); incentives pay 40% on the 4 eligible varieties only.`,
+                'text-slate-700'
+            );
         }).join('');
     };
 
     let html = `
-        <table class="w-full text-xs text-left">
-            <thead class="bg-slate-100 text-slate-700 uppercase font-semibold border-b border-slate-200">
-                <tr>
-                    <th class="px-4 py-3">Section / Variety</th>
-                    ${years.map(y => `<th class="px-3 py-3 text-right">${y}</th>`).join('')}
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 font-mono">
-                <!-- Part 1 -->
-                <tr class="bg-slate-50/80 font-sans font-bold text-slate-900"><td colspan="${years.length + 1}" class="px-4 py-2">Part 1: Volumes by Variety (${unit})</td></tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Phka Rumduol</td>${buildVarietyCells("Phka Rumduol", "phka_rumduol", "45.2")}</tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">White rice</td>${buildVarietyCells("White rice", "white_rice", "42.2")}</tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Red Jasmine</td>${buildVarietyCells("Red Jasmine", "red_jasmine", "11.4")}</tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Seed</td>${buildVarietyCells("Seed", "seed", "1.2")}</tr>
-                <tr class="bg-emerald-50/60 font-bold text-emerald-900 border-t border-b border-emerald-200">
-                    <td class="px-4 py-2 font-sans">Total Organic Volume</td>
-                    ${(isMT ? p1Mt.total : p1Kg.total).map((v, idx) => {
-                        const src = isMT ? p1Mt : p1Kg;
-                        const calc = `${fmtVol(src.phka_rumduol[idx])} + ${fmtVol(src.white_rice[idx])} + ${fmtVol(src.red_jasmine[idx])} + ${fmtVol(src.seed[idx])} = ${fmtVol(v)} ${unit}`;
+        <table class="w-full text-[13.5px] text-left border-collapse">
+            ${tableHead}
+            <tbody class="divide-y divide-slate-100 font-sans">
+                <!-- Part 1: 4 Eligible Varieties -->
+                ${sectionRow(`Part 1: Organic Paddy Procurement (${unit})`, 'bg-emerald-500', 'bg-emerald-50/45', 'text-emerald-950', 'border-y border-emerald-200/70')}
+                <tr class="group hover:bg-slate-50/90 transition-colors">${labelCell(`Phka Rumduol (${shares5yr.phka_rumduol.toFixed(1)}% base)`, '#059669')}${buildVarietyCells('Phka Rumduol', 'phka_rumduol')}</tr>
+                <tr class="group hover:bg-slate-50/90 transition-colors">${labelCell(`White Rice (${shares5yr.white_rice.toFixed(1)}% base)`, '#0284c7')}${buildVarietyCells('White Rice', 'white_rice')}</tr>
+                <tr class="group hover:bg-slate-50/90 transition-colors">${labelCell(`Red Jasmine (${shares5yr.red_jasmine.toFixed(1)}% base)`, '#e11d48')}${buildVarietyCells('Red Jasmine', 'red_jasmine')}</tr>
+                <tr class="group hover:bg-slate-50/90 transition-colors">${labelCell(`Seed (${shares5yr.seed.toFixed(1)}% base)`, '#d97706')}${buildVarietyCells('Seed', 'seed')}</tr>
+                <tr class="group bg-emerald-50/85 hover:bg-emerald-100/50 font-bold text-emerald-950 border-y border-emerald-200 transition-colors">
+                    ${labelCell('Total Organic Volume', null, 'bg-emerald-50 group-hover:bg-emerald-100/80', 'px-5 py-3 font-bold text-emerald-950')}
+                    ${p1Mt.total.map((v, idx) => {
+                        const calc = idx === 0
+                            ? `2026 Audited Actual = ${fmtVol(v)} MT`
+                            : `${fmtVol(cmp.existing_volume_mt[idx])} (Exist) + ${fmtVol(cmp.graduated_volume_mt[idx])} (Grad) = ${fmtVol(v)} MT`;
                         return formulaCell(
                             fmtVol(v),
-                            `Total Organic Volume • ${years[idx]}`,
+                            `Total Eligible Organic • ${years[idx]}`,
                             calc,
-                            `=ROUND( Part 1 [Phka Rumduol + White Rice + Red Jasmine + Seed], 0 )`,
-                            `Why: Total certified organic paddy expected for commercial purchase across all 4 rice varieties.`,
-                            'py-2'
+                            `=ROUND( Comp A + Comp B, 0 )`,
+                            idx === 0
+                                ? 'Why: Audited 2026 actual organic purchases (Sticky Rice excluded).'
+                                : 'Why: Combines damped growth from existing farmers + newly certified conversion graduates (Sticky Rice excluded).',
+                            idx === 0 ? 'py-3 bg-emerald-100/70 border-r border-emerald-200/80 font-bold' : 'py-3 font-bold'
                         );
                     }).join('')}
                 </tr>
 
                 <!-- Part 2 -->
-                <tr class="bg-slate-50/80 font-sans font-bold text-slate-900"><td colspan="${years.length + 1}" class="px-4 py-2">Part 2: Volumes in Transition (${unit}) - Total Farm Production (4,420 kg/farmer)</td></tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Part 2.1 - Year 0 (WF) Total</td>${buildPart2Cells("Part 2.1 - WF", "WF", "yr0_wf_volume", "transition_yr0", "WF")}</tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Part 2.2 - Year 1 (Ibis I) Total</td>${buildPart2Cells("Part 2.2 - Ibis I", "Ibis I", "yr1_volume", "transition_yr1", "Ibis I")}</tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Part 2.3 - Year 2 (Ibis II) Total</td>${buildPart2Cells("Part 2.3 - Ibis II", "Ibis II", "yr2_volume", "transition_yr2", "Ibis II")}</tr>
-                <tr class="bg-blue-50/60 font-bold text-blue-900 border-t border-b border-blue-200">
-                    <td class="px-4 py-2 font-sans">Combined Transition Production</td>
-                    ${(isMT ? p2Mt.combined_volume : p2Kg.combined_volume).map((v, idx) => {
-                        const src = isMT ? p2Mt : p2Kg;
-                        const calc = `${fmtVol(src.yr0_wf_volume[idx])} + ${fmtVol(src.yr1_volume[idx])} + ${fmtVol(src.yr2_volume[idx])} = ${fmtVol(v)} ${unit}`;
+                ${sectionRow(`Part 2: Conversion &amp; Transition Harvest (${unit})`, 'bg-sky-500', 'bg-sky-50/45', 'text-sky-950', 'border-y border-sky-200/70')}
+                <tr class="group hover:bg-slate-50/90 transition-colors">${labelCell('Part 2.1 - Year 0 (WF) Total', '#7c3aed')}${buildPart2Cells('Part 2.1 - WF', 'WF', 'yr0_wf_volume', 'transition_yr0')}</tr>
+                <tr class="group hover:bg-slate-50/90 transition-colors">${labelCell('Part 2.2 - Year 1 (Ibis I) Total', '#0284c7')}${buildPart2Cells('Part 2.2 - Ibis I', 'Ibis I', 'yr1_volume', 'transition_yr1')}</tr>
+                <tr class="group hover:bg-slate-50/90 transition-colors">${labelCell('Part 2.3 - Year 2 (Ibis II) Total', '#d97706')}${buildPart2Cells('Part 2.3 - Ibis II', 'Ibis II', 'yr2_volume', 'transition_yr2')}</tr>
+                <tr class="group bg-sky-50/85 hover:bg-sky-100/50 font-bold text-sky-950 border-y border-sky-200 transition-colors">
+                    ${labelCell('Combined Transition Production', null, 'bg-sky-50 group-hover:bg-sky-100/80', 'px-5 py-3 font-bold text-sky-950')}
+                    ${p2Mt.combined_volume.map((v, idx) => {
+                        const calc = `${fmtVol(p2Mt.yr0_wf_volume[idx])} + ${fmtVol(p2Mt.yr1_volume[idx])} + ${fmtVol(p2Mt.yr2_volume[idx])} = ${fmtVol(v)} MT`;
                         return formulaCell(
                             fmtVol(v),
                             `Combined Transition • ${years[idx]}`,
                             calc,
-                            `=ROUND( Part 2.1 [WF] + Part 2.2 [Ibis I] + Part 2.3 [Ibis II], 0 )`,
-                            `Why: Total crop produced by in-conversion farmers; 40% of this base determines annual transition incentive budgets.`,
-                            'py-2'
+                            `=ROUND( WF + Ibis I + Ibis II, 0 )`,
+                            'Why: Total harvest across all 5 varieties (see Conversion & Incentives tab for Sticky Rice deduction in incentive budgets).',
+                            idx === 0 ? 'py-3 bg-sky-100/70 border-r border-sky-200/80 font-bold' : 'py-3 font-bold'
                         );
                     }).join('')}
                 </tr>
 
                 <!-- Part 3 -->
-                <tr class="bg-slate-50/80 font-sans font-bold text-slate-900"><td colspan="${years.length + 1}" class="px-4 py-2">Part 3: Farmers in IRCC Program (Headcount - Proportional ${ncPct}% NC Rate)</td></tr>
-                <tr>
-                    <td class="px-4 py-1.5 font-sans text-slate-600">Selling Paddy (Organic)</td>
-                    ${f.selling_paddy.map((v, idx) => {
-                        if (idx === 0) {
-                            return formulaCell(
-                                v.toLocaleString(),
-                                `Selling Paddy • 2026`,
-                                `2026 Audited Organic Sellers = 1,700 (out of 1,807 certified organic)`,
-                                `2026 Baseline = ROUND( AFL [Selling Organic], 0 )`,
-                                `Why: Uses actual 2026 sellers from AFL (107 certified farmers kept harvest for home use); NC is NOT deducted again in 2026.`
-                            );
-                        }
-                        const calc = `(${f.selling_paddy[idx - 1].toLocaleString()} prev Organic + ${f.transition_yr2[idx - 1].toLocaleString()} prev Ibis II) × ${retPct}% = ${v.toLocaleString()}`;
-                        const why = years[idx] === 2028
-                            ? `Why: 2028 dips because only 11 Ibis II farmers graduate (from the tiny 2026 Ibis I group of 12), minus 11.59% proportional NC.`
-                            : `Why: Prior-year Ibis II farmers complete their 4th harvest cycle to graduate into Organic, minus ${ncPct}% annual NC.`;
-                        return formulaCell(
-                            v.toLocaleString(),
-                            `Selling Paddy • ${years[idx]}`,
-                            calc,
-                            `=ROUND( (Part 3 [Prev Organic] + Part 3 [Prev Ibis II]) × (1 - ${ncPct}% NC), 0 )`,
-                            why
-                        );
-                    }).join('')}
+                ${sectionRow('Part 3: Farmers', 'bg-amber-500', 'bg-amber-50/45', 'text-amber-950', 'border-y border-amber-200/70')}
+                <tr class="group hover:bg-slate-50/90 transition-colors">
+                    ${labelCell('Transition Year 0 (WF)', '#7c3aed')}
+                    ${f.transition_yr0.map((v, idx) => formulaCell(v.toLocaleString(), `WF • ${years[idx]}`, idx === 0 ? '2026 Active WF = 332' : `${intake} × ${retPct}% = ${v}`, idx === 0 ? '= 2026 AFL WF' : `=ROUND( Intake × (1 - ${ncPct}% NC), 0 )`, 'Why: Active WF cohort after annual audit NC.', idx === 0 ? 'bg-slate-50/70 border-r border-slate-200/80 font-medium text-slate-800' : 'text-slate-700')).join('')}
                 </tr>
-                <tr>
-                    <td class="px-4 py-1.5 font-sans text-slate-600">Transition Year 0 (WF)</td>
-                    ${f.transition_yr0.map((v, idx) => {
-                        if (idx === 0) {
-                            return formulaCell(
-                                v.toLocaleString(),
-                                `WF • 2026`,
-                                `2026 Active WF = 332 farmers`,
-                                `2026 Baseline = ROUND( AFL [WF Active], 0 )`,
-                                `Why: 2026 active count already excludes 2026 NC; starts the 4-harvest-cycle conversion pipeline.`
-                            );
-                        }
-                        const calc = `${intake} new registrations × ${retPct}% (1 - ${ncPct}% NC) = ${v.toLocaleString()}`;
-                        return formulaCell(
-                            v.toLocaleString(),
-                            `WF • ${years[idx]}`,
-                            calc,
-                            `=ROUND( Annual Intake [${intake}] × (1 - ${ncPct}% NC), 0 )`,
-                            `Why: ~${intake} new farmers join in Jan–May; ${ncPct}% exit at the Sept audit, leaving ${v} compliant WF farmers.`
-                        );
-                    }).join('')}
+                <tr class="group hover:bg-slate-50/90 transition-colors">
+                    ${labelCell('Transition Year 1 (Ibis I)', '#0284c7')}
+                    ${f.transition_yr1.map((v, idx) => formulaCell(v.toLocaleString(), `Ibis I • ${years[idx]}`, idx === 0 ? '2026 Active Ibis I = 12' : `${f.transition_yr0[idx - 1]} WF × ${retPct}% = ${v}`, idx === 0 ? '= 2026 AFL Ibis I' : `=ROUND( Prev WF × (1 - ${ncPct}% NC), 0 )`, 'Why: Cycle 2 cohort advancing from WF.', idx === 0 ? 'bg-slate-50/70 border-r border-slate-200/80 font-medium text-slate-800' : 'text-slate-700')).join('')}
                 </tr>
-                <tr>
-                    <td class="px-4 py-1.5 font-sans text-slate-600">Transition Year 1 (Ibis I)</td>
-                    ${f.transition_yr1.map((v, idx) => {
-                        if (idx === 0) {
-                            return formulaCell(
-                                v.toLocaleString(),
-                                `Ibis I • 2026`,
-                                `2026 Active Ibis I = 12 farmers`,
-                                `2026 Baseline = ROUND( AFL [Ibis I Active], 0 )`,
-                                `Why: Reflects the small 2026 Ibis I cohort in AFL; already post-audit so no extra NC deduction in 2026.`
-                            );
-                        }
-                        const calc = `${f.transition_yr0[idx - 1].toLocaleString()} prev WF × ${retPct}% (1 - ${ncPct}% NC) = ${v.toLocaleString()}`;
-                        return formulaCell(
-                            v.toLocaleString(),
-                            `Ibis I • ${years[idx]}`,
-                            calc,
-                            `=ROUND( Part 3 [Prev Year WF] × (1 - ${ncPct}% NC), 0 )`,
-                            `Why: Active WF farmers advance to their 2nd harvest cycle (Ibis I), retaining ${retPct}% after annual audit NC.`
-                        );
-                    }).join('')}
+                <tr class="group hover:bg-slate-50/90 transition-colors">
+                    ${labelCell('Transition Year 2 (Ibis II)', '#d97706')}
+                    ${f.transition_yr2.map((v, idx) => formulaCell(v.toLocaleString(), `Ibis II • ${years[idx]}`, idx === 0 ? '2026 Active Ibis II = 413' : `${f.transition_yr1[idx - 1]} Ibis I × ${retPct}% = ${v}`, idx === 0 ? '= 2026 AFL Ibis II' : `=ROUND( Prev Ibis I × (1 - ${ncPct}% NC), 0 )`, 'Why: Cycle 3 cohort advancing to Organic next year.', idx === 0 ? 'bg-slate-50/70 border-r border-slate-200/80 font-medium text-slate-800' : 'text-slate-700')).join('')}
                 </tr>
-                <tr>
-                    <td class="px-4 py-1.5 font-sans text-slate-600">Transition Year 2 (Ibis II)</td>
-                    ${f.transition_yr2.map((v, idx) => {
-                        if (idx === 0) {
-                            return formulaCell(
-                                v.toLocaleString(),
-                                `Ibis II • 2026`,
-                                `2026 Active Ibis II = 413 farmers`,
-                                `2026 Baseline = ROUND( AFL [Ibis II Active], 0 )`,
-                                `Why: These 413 Ibis II farmers complete conversion in 2026 and graduate into Selling Organic in 2027.`
-                            );
-                        }
-                        const calc = `${f.transition_yr1[idx - 1].toLocaleString()} prev Ibis I × ${retPct}% (1 - ${ncPct}% NC) = ${v.toLocaleString()}`;
-                        return formulaCell(
-                            v.toLocaleString(),
-                            `Ibis II • ${years[idx]}`,
-                            calc,
-                            `=ROUND( Part 3 [Prev Year Ibis I] × (1 - ${ncPct}% NC), 0 )`,
-                            `Why: Ibis I farmers advance to their 3rd harvest cycle (Ibis II), retaining ${retPct}% after annual audit NC.`
-                        );
-                    }).join('')}
+                <tr class="group bg-amber-50/80 hover:bg-amber-100/50 font-bold text-amber-950 border-y border-amber-200 transition-colors">
+                    ${labelCell('Total Active Compliant Farmers', null, 'bg-amber-50 group-hover:bg-amber-100/80', 'px-5 py-3 font-bold text-amber-950')}
+                    ${f.total_active.map((v, idx) => formulaCell(v.toLocaleString(), `Total Active • ${years[idx]}`, `${f.certified_organic_eligible[idx].toLocaleString()} + ${f.transition_yr0[idx]} + ${f.transition_yr1[idx]} + ${f.transition_yr2[idx]} = ${v.toLocaleString()}`, '= Org + WF + Ibis I + Ibis II', 'Why: Total unique compliant farmers across all stages.', idx === 0 ? 'py-3 bg-amber-100/70 border-r border-amber-200/80 font-bold' : 'py-3 font-bold')).join('')}
                 </tr>
-                <tr class="bg-amber-50/60 font-bold text-amber-900 border-t border-b border-amber-200">
-                    <td class="px-4 py-2 font-sans">Total Pipeline Farmers (=SUM)</td>
-                    ${f.total_farmers.map((v, idx) => {
-                        const calc = `${f.selling_paddy[idx].toLocaleString()} + ${f.transition_yr0[idx].toLocaleString()} + ${f.transition_yr1[idx].toLocaleString()} + ${f.transition_yr2[idx].toLocaleString()} = ${v.toLocaleString()}`;
-                        return formulaCell(
-                            v.toLocaleString(),
-                            `Total Pipeline • ${years[idx]}`,
-                            calc,
-                            `=ROUND( Part 3 [Selling Paddy + WF + Ibis I + Ibis II], 0 )`,
-                            `Why: Total active farmers actively selling organic paddy or progressing through the 3 transition stages.`,
-                            'py-2'
-                        );
-                    }).join('')}
-                </tr>
-                <tr class="bg-slate-100 font-bold text-slate-800">
-                    <td class="px-4 py-2 font-sans">Total Active Farmers (incl. 107 non-selling organic)*</td>
-                    ${f.total_active_farmers_incl_nonsell.map((v, idx) => {
-                        const pipe = f.total_farmers[idx];
-                        const nonSell = v - pipe;
-                        const calc = `${pipe.toLocaleString()} pipeline + ${nonSell.toLocaleString()} non-selling organic = ${v.toLocaleString()} active`;
-                        return formulaCell(
-                            v.toLocaleString(),
-                            `Total Active • ${years[idx]}`,
-                            calc,
-                            `=ROUND( Part 3 [Total Pipeline] + Certified [Non-selling Organic], 0 )`,
-                            idx === 0
-                                ? `Why: Reconciles directly to AFL 2026 active base (2,564 = 1,807 Organic + 332 WF + 12 Ibis I + 413 Ibis II; excludes 336 NC).`
-                                : `Why: Total compliant farmers in the IRCC registry (including organic farmers retaining crop for home use).`,
-                            'py-2'
-                        );
-                    }).join('')}
+                <tr class="group bg-rose-50/55 hover:bg-rose-100/40 text-rose-800 transition-colors">
+                    ${labelCell('Non-Compliance (NC) Farmers / Projected Exits', '#e11d48', 'bg-rose-50 group-hover:bg-rose-100/60', 'pl-9 pr-5 py-2.5 font-medium text-rose-800')}
+                    ${f.projected_nc_exits.map((v, idx) => formulaCell(v.toLocaleString(), `NC Exits • ${years[idx]}`, idx === 0 ? '2026 Audited NC = 336 (11.59%)' : `Annual ~${ncPct}% exits = ${v.toLocaleString()}`, idx === 0 ? '= general_data [2026 NC]' : `= (Prev Active + ${intake}) - Active`, 'Why: Annual non-compliance attrition.', idx === 0 ? 'bg-rose-100/55 border-r border-rose-200/70 font-medium' : 'font-medium')).join('')}
                 </tr>
             </tbody>
         </table>
@@ -1036,27 +975,200 @@ function renderMasterTable(sc) {
     }
 }
 
+// 3B. Transition Breakdown by Variety — Part 2 (Harvest MT) & Part 3 (Farmers)
+function renderTransitionBreakdownTable(sc, hist, meta) {
+    const years = sc.years;
+    const stageShares = meta.variety_shares_pct.part2_stage_shares_by_year;
+    const sh5 = meta.variety_shares_pct.part2_transition_2022_2026_all5;
+    const sh26 = hist.transition_production['2026'].expected_shares_pct;
+    const p2Mt = sc.part2_transition_volumes_mt;
+    const f = sc.farmers;
+    const fmtVol = (v) => Math.round(v).toLocaleString();
+
+    const { formulaCell, sectionRow, labelCell, tableHead } = createForecastTableHelpers(years, `Section / Variety (${sc.label})`, { compact: true });
+
+    const varieties = [
+        { key: 'phka_rumduol', label: 'Phka Rumduol', dot: '#059669' },
+        { key: 'white_rice', label: 'White Rice', dot: '#0284c7' },
+        { key: 'red_jasmine', label: 'Red Jasmine', dot: '#e11d48' },
+        { key: 'sticky_rice', label: 'Sticky Rice', dot: '#7c3aed' },
+        { key: 'seed', label: 'Seed', dot: '#d97706' }
+    ];
+
+    const weightsForYear = (stageKey, idx) => {
+        const sched = stageShares && stageShares[stageKey];
+        const src = sched ? sched[idx] : (idx === 0 ? sh26 : sh5);
+        return varieties.map(v => src[v.key]);
+    };
+
+    const buildAllocatedRows = (partTag, stageName, stageKey, totalsArr, unitLabel) => {
+        const totalInts = totalsArr.map(v => Math.round(v));
+        const matrix = years.map((_, idx) => allocateExactByWeights(totalInts[idx], weightsForYear(stageKey, idx)));
+        const sched = stageShares && stageShares[stageKey];
+
+        const headerTotalRow = `
+            <tr class="group bg-slate-100/70 hover:bg-slate-100 font-semibold text-slate-900 border-t border-slate-200 transition-colors">
+                ${labelCell(stageName, null, 'bg-slate-100/90 group-hover:bg-slate-100', 'px-4 py-1.5 font-semibold text-slate-800')}
+                ${totalInts.map((tot, yIdx) => {
+                    const sumStr = matrix[yIdx].map(n => n.toLocaleString()).join(' + ');
+                    return formulaCell(
+                        tot.toLocaleString(),
+                        `${stageName} Total • ${years[yIdx]}`,
+                        `${sumStr} = ${tot.toLocaleString()} ${unitLabel}`,
+                        `=SUM( ${stageName} [All 5 Varieties] )`,
+                        '',
+                        yIdx === 0 ? 'py-1.5 bg-sky-50/75 border-r border-slate-200/80 font-bold' : 'py-1.5 font-bold'
+                    );
+                }).join('')}
+            </tr>`;
+
+        const varRows = varieties.map((vr, vIdx) => {
+            let tag = '';
+            if (vr.key === 'sticky_rice') tag = '3.35% fixed';
+            else if (vr.key === 'seed') tag = '0.03% fixed';
+            else if (sched) tag = `${sched[1][vr.key].toFixed(1)}%→${sched[sched.length - 1][vr.key].toFixed(1)}%`;
+            else tag = `${sh5[vr.key].toFixed(1)}%`;
+
+            const cells = years.map((yr, yIdx) => {
+                const val = matrix[yIdx][vIdx];
+                const src = sched ? sched[yIdx] : (yIdx === 0 ? sh26 : sh5);
+                const pctUsed = src[vr.key].toFixed(2);
+                const stageTotStr = totalInts[yIdx].toLocaleString();
+                const basis = yIdx === 0 ? '2026 actual mix' : `${yr} mix`;
+                return formulaCell(
+                    val.toLocaleString(),
+                    `${partTag} • ${vr.label} • ${yr}`,
+                    `${stageTotStr} ${unitLabel} × ${pctUsed}% (${basis}) = ${val.toLocaleString()} ${unitLabel}`,
+                    `=ROUND( ${stageName} × ${pctUsed}%, 0 )`,
+                    '',
+                    yIdx === 0 ? 'bg-slate-50/60 border-r border-slate-200/80 text-slate-700' : 'text-slate-600'
+                );
+            }).join('');
+            return `<tr class="group hover:bg-slate-50/90 transition-colors">${labelCell(`${vr.label} (${tag})`, vr.dot, 'bg-white group-hover:bg-slate-50', 'pl-8 pr-3 py-1 text-slate-600')}${cells}</tr>`;
+        }).join('');
+
+        return headerTotalRow + varRows;
+    };
+
+    const html = `
+        <table class="w-full text-[12.5px] text-left border-collapse">
+            ${tableHead}
+            <tbody class="divide-y divide-slate-100 font-sans">
+                <!-- Part 2 separated by variety for each transition -->
+                ${sectionRow('Part 2: Conversion &amp; Transition Harvest by Variety (MT)', 'bg-sky-500', 'bg-sky-50/45', 'text-sky-950', 'border-y border-sky-200/70')}
+                ${buildAllocatedRows('Part 2.1 WF', 'Part 2.1 - Year 0 (WF)', 'wf', p2Mt.yr0_wf_volume, 'MT')}
+                ${buildAllocatedRows('Part 2.2 Ibis I', 'Part 2.2 - Year 1 (Ibis I)', 'ibis_i', p2Mt.yr1_volume, 'MT')}
+                ${buildAllocatedRows('Part 2.3 Ibis II', 'Part 2.3 - Year 2 (Ibis II)', 'ibis_ii', p2Mt.yr2_volume, 'MT')}
+                <tr class="group bg-sky-50/85 hover:bg-sky-100/50 font-bold text-sky-950 border-y border-sky-200 transition-colors">
+                    ${labelCell('Combined Transition Production', null, 'bg-sky-50 group-hover:bg-sky-100/80', 'px-4 py-1.5 font-bold text-sky-950')}
+                    ${p2Mt.combined_volume.map((v, idx) => {
+                        const calc = `${fmtVol(p2Mt.yr0_wf_volume[idx])} + ${fmtVol(p2Mt.yr1_volume[idx])} + ${fmtVol(p2Mt.yr2_volume[idx])} = ${fmtVol(v)} MT`;
+                        return formulaCell(
+                            fmtVol(v),
+                            `Combined Transition • ${years[idx]}`,
+                            calc,
+                            `=ROUND( WF + Ibis I + Ibis II, 0 )`,
+                            '',
+                            idx === 0 ? 'py-1.5 bg-sky-100/70 border-r border-sky-200/80 font-bold' : 'py-1.5 font-bold'
+                        );
+                    }).join('')}
+                </tr>
+
+                <!-- Part 3: Farmers (transition counts only) -->
+                ${sectionRow('Part 3: Farmers', 'bg-amber-500', 'bg-amber-50/45', 'text-amber-950', 'border-y border-amber-200/70')}
+                <tr class="group hover:bg-slate-50/90 transition-colors">
+                    ${labelCell('Transition Year 0 (WF)', '#7c3aed', 'bg-white group-hover:bg-slate-50', 'pl-6 pr-3 py-1.5 font-medium text-slate-700')}
+                    ${f.transition_yr0.map((v, idx) => formulaCell(
+                        v.toLocaleString(),
+                        `WF • ${years[idx]}`,
+                        idx === 0 ? '2026 Active WF = 332' : `${sc.parameters.annual_new_intake} × ${sc.parameters.retention_rate_pct.toFixed(2)}% = ${v}`,
+                        idx === 0 ? '= 2026 AFL WF' : `=ROUND( Intake × (1 - ${sc.parameters.nc_rate_pct.toFixed(2)}% NC), 0 )`,
+                        '',
+                        idx === 0 ? 'py-1.5 bg-slate-50/60 border-r border-slate-200/80 font-medium text-slate-800' : 'py-1.5 text-slate-700'
+                    )).join('')}
+                </tr>
+                <tr class="group hover:bg-slate-50/90 transition-colors">
+                    ${labelCell('Transition Year 1 (Ibis I)', '#0284c7', 'bg-white group-hover:bg-slate-50', 'pl-6 pr-3 py-1.5 font-medium text-slate-700')}
+                    ${f.transition_yr1.map((v, idx) => formulaCell(
+                        v.toLocaleString(),
+                        `Ibis I • ${years[idx]}`,
+                        idx === 0 ? '2026 Active Ibis I = 12' : `${f.transition_yr0[idx - 1]} WF × ${sc.parameters.retention_rate_pct.toFixed(2)}% = ${v}`,
+                        idx === 0 ? '= 2026 AFL Ibis I' : `=ROUND( Prev WF × (1 - ${sc.parameters.nc_rate_pct.toFixed(2)}% NC), 0 )`,
+                        '',
+                        idx === 0 ? 'py-1.5 bg-slate-50/60 border-r border-slate-200/80 font-medium text-slate-800' : 'py-1.5 text-slate-700'
+                    )).join('')}
+                </tr>
+                <tr class="group hover:bg-slate-50/90 transition-colors">
+                    ${labelCell('Transition Year 2 (Ibis II)', '#d97706', 'bg-white group-hover:bg-slate-50', 'pl-6 pr-3 py-1.5 font-medium text-slate-700')}
+                    ${f.transition_yr2.map((v, idx) => formulaCell(
+                        v.toLocaleString(),
+                        `Ibis II • ${years[idx]}`,
+                        idx === 0 ? '2026 Active Ibis II = 413' : `${f.transition_yr1[idx - 1]} Ibis I × ${sc.parameters.retention_rate_pct.toFixed(2)}% = ${v}`,
+                        idx === 0 ? '= 2026 AFL Ibis II' : `=ROUND( Prev Ibis I × (1 - ${sc.parameters.nc_rate_pct.toFixed(2)}% NC), 0 )`,
+                        '',
+                        idx === 0 ? 'py-1.5 bg-slate-50/60 border-r border-slate-200/80 font-medium text-slate-800' : 'py-1.5 text-slate-700'
+                    )).join('')}
+                </tr>
+                <tr class="group bg-amber-50/80 hover:bg-amber-100/50 font-bold text-amber-950 border-y border-amber-200 transition-colors">
+                    ${labelCell('Total Transition Farmers', null, 'bg-amber-50 group-hover:bg-amber-100/80', 'px-4 py-1.5 font-bold text-amber-950')}
+                    ${f.total_transition.map((v, idx) => formulaCell(
+                        v.toLocaleString(),
+                        `Total Transition Farmers • ${years[idx]}`,
+                        `${f.transition_yr0[idx]} + ${f.transition_yr1[idx]} + ${f.transition_yr2[idx]} = ${v.toLocaleString()} farmers`,
+                        `=SUM( WF + Ibis I + Ibis II )`,
+                        '',
+                        idx === 0 ? 'py-1.5 bg-amber-100/70 border-r border-amber-200/80 font-bold' : 'py-1.5 font-bold'
+                    )).join('')}
+                </tr>
+                <tr class="group bg-emerald-50/75 hover:bg-emerald-100/45 font-bold text-emerald-950 border-b border-emerald-200 transition-colors">
+                    ${labelCell('Total Active Compliant Farmers', null, 'bg-emerald-50 group-hover:bg-emerald-100/70', 'px-4 py-1.5 font-bold text-emerald-950')}
+                    ${f.total_active.map((v, idx) => formulaCell(
+                        v.toLocaleString(),
+                        `Total Active Compliant • ${years[idx]}`,
+                        `${f.certified_organic_eligible[idx].toLocaleString()} Org + ${f.total_transition[idx].toLocaleString()} Trans = ${v.toLocaleString()}`,
+                        `= Cert. Organic + Total Transition`,
+                        '',
+                        idx === 0 ? 'py-1.5 bg-emerald-100/70 border-r border-emerald-200/80 font-bold' : 'py-1.5 font-bold'
+                    )).join('')}
+                </tr>
+                <tr class="group bg-rose-50/55 hover:bg-rose-100/40 text-rose-800 transition-colors">
+                    ${labelCell('Non-Compliance (NC) Farmers / Projected Exits', '#e11d48', 'bg-rose-50 group-hover:bg-rose-100/60', 'pl-6 pr-3 py-1.5 font-medium text-rose-800')}
+                    ${f.projected_nc_exits.map((v, idx) => formulaCell(
+                        v.toLocaleString(),
+                        `NC Exits • ${years[idx]}`,
+                        idx === 0 ? '2026 Audited NC = 336 (11.59%)' : `Annual ~${sc.parameters.nc_rate_pct.toFixed(2)}% exits = ${v.toLocaleString()}`,
+                        idx === 0 ? '= general_data [2026 NC]' : `= (Prev Active + ${sc.parameters.annual_new_intake}) - Active`,
+                        '',
+                        idx === 0 ? 'py-1.5 bg-rose-100/55 border-r border-rose-200/70 font-medium' : 'py-1.5 font-medium'
+                    )).join('')}
+                </tr>
+            </tbody>
+        </table>
+    `;
+
+    const el = document.getElementById('transitionBreakdownTableContainer');
+    if (el) {
+        el.innerHTML = html;
+        attachFormulaTooltips(el);
+    }
+}
+
 function attachFormulaTooltips(container) {
     let tip = document.getElementById('cellFormulaTooltip');
     if (!tip) {
         tip = document.createElement('div');
         tip.id = 'cellFormulaTooltip';
-        tip.className = 'fixed z-50 pointer-events-none hidden bg-slate-900/95 text-white text-xs rounded-lg shadow-xl border border-slate-700 px-3.5 py-2.5 max-w-sm leading-relaxed';
+        tip.className = 'fixed z-50 pointer-events-none hidden bg-slate-900/95 text-white text-xs rounded-xl shadow-2xl border border-slate-700/90 px-4 py-2.5 w-max max-w-[92vw] leading-snug';
         document.body.appendChild(tip);
     }
 
     const cells = container.querySelectorAll('td[data-ftitle]');
     cells.forEach(cell => {
         cell.addEventListener('mouseenter', () => {
-            const title = cell.getAttribute('data-ftitle');
-            const calc = cell.getAttribute('data-fcalc');
-            const formula = cell.getAttribute('data-fexcel');
-            const why = cell.getAttribute('data-fwhy');
             tip.innerHTML = `
-                <div class="font-bold text-emerald-400 mb-1">${title}</div>
-                <div class="font-mono text-[11px] text-amber-300 bg-slate-800/90 px-2 py-1 rounded border border-slate-700 mb-1.5">${formula}</div>
-                <div class="text-slate-100 mb-1">${calc}</div>
-                <div class="text-[11px] text-slate-400 italic">${why}</div>
+                <div class="font-bold text-emerald-400 mb-1.5 whitespace-nowrap">${cell.getAttribute('data-ftitle')}</div>
+                <div class="font-mono text-[11px] text-amber-300 bg-slate-800/90 px-2.5 py-1 rounded border border-slate-700 mb-1.5 whitespace-nowrap">${cell.getAttribute('data-fexcel')}</div>
+                <div class="text-slate-100 whitespace-nowrap">${cell.getAttribute('data-fcalc')}</div>
             `;
             tip.classList.remove('hidden');
 
@@ -1069,60 +1181,69 @@ function attachFormulaTooltips(container) {
             tip.style.top = `${top}px`;
             tip.style.left = `${left}px`;
         });
-        cell.addEventListener('mouseleave', () => {
-            tip.classList.add('hidden');
-        });
+        cell.addEventListener('mouseleave', () => tip.classList.add('hidden'));
     });
 }
 
-function renderTableRow(label, values, decimals = 0) {
-    return `
-        <tr>
-            <td class="px-4 py-1.5 font-sans text-slate-600">${label}</td>
-            ${values.map(v => `<td class="px-3 py-1.5 text-right">${typeof v === 'number' ? v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : v}</td>`).join('')}
-        </tr>
-    `;
-}
-
-// 4. Render Historical Table (2022-2026)
-function renderHistoricalTable(hist) {
+// 4. Render AFL and Paddy Purchase Table (2022–2026)
+function renderHistoricalTables(hist, meta) {
     const years = hist.years;
+    const sum = (arr) => arr.reduce((a, b) => a + b, 0);
+
+    const expF = years.map(y => hist.organic_sales[String(y)].exp_farmers);
+    const actF = years.map(y => hist.organic_sales[String(y)].act_farmers);
+    const sellRates = years.map(y => hist.organic_sales[String(y)].selling_rate_pct);
+    const exp4 = years.map(y => hist.organic_sales[String(y)].expected_kg.eligible4_total);
+    const act4 = years.map(y => hist.organic_sales[String(y)].actual_kg.eligible4_total);
+    const ncArr = years.map(y => hist.compliance[String(y)].nc_farmers);
+
+    const avgExpF = Math.round(sum(expF) / years.length);
+    const avgActF = Math.round(sum(actF) / years.length);
+    const avgSellRate = (sum(sellRates) / years.length).toFixed(1);
+    const avgEstMT = Math.round(sum(exp4) / years.length / 1000);
+    const avgActMT = Math.round(sum(act4) / years.length / 1000);
+    const avgRealRate = meta.historical_summary.simple_5yr_realization_pct.toFixed(1);
+    const avgNC = Math.round(sum(ncArr) / years.length);
+
     let html = `
-        <table class="w-full text-xs text-left">
-            <thead class="bg-slate-100 text-slate-700 uppercase font-semibold border-b border-slate-200">
+        <table class="w-full text-[13.5px] text-left border-collapse">
+            <thead class="bg-slate-100/95 text-slate-700 text-xs uppercase font-bold tracking-wider border-b-2 border-slate-200">
                 <tr>
-                    <th class="px-4 py-3">Harvest Year</th>
-                    <th class="px-3 py-3 text-right">Registered Organic</th>
-                    <th class="px-3 py-3 text-right">Selling Farmers</th>
-                    <th class="px-3 py-3 text-right">Selling Rate</th>
-                    <th class="px-3 py-3 text-right">Est. Volume (MT)</th>
-                    <th class="px-3 py-3 text-right">Act. Purchased (MT)</th>
-                    <th class="px-3 py-3 text-right">Realization Rate</th>
-                    <th class="px-3 py-3 text-right">NC Farmers</th>
+                    <th class="px-5 py-3.5">Harvest Year</th>
+                    <th class="px-4 py-3.5 text-right">Registered Organic</th>
+                    <th class="px-4 py-3.5 text-right">Selling Farmers</th>
+                    <th class="px-4 py-3.5 text-right">Selling Rate</th>
+                    <th class="px-4 py-3.5 text-right">Est. Volume (MT)</th>
+                    <th class="px-4 py-3.5 text-right">Act. Purchased (MT)</th>
+                    <th class="px-4 py-3.5 text-right">Realization Rate</th>
+                    <th class="px-5 py-3.5 text-right">NC Farmers</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100 font-mono">
-                ${years.map((y, idx) => `
-                    <tr>
-                        <td class="px-4 py-2 font-sans font-bold text-slate-800">${y}</td>
-                        <td class="px-3 py-2 text-right">${hist.farmers.organic_registered[idx].toLocaleString()}</td>
-                        <td class="px-3 py-2 text-right">${hist.farmers.organic_selling[idx].toLocaleString()}</td>
-                        <td class="px-3 py-2 text-right text-emerald-700 font-semibold">${hist.farmers.selling_rate_pct[idx]}%</td>
-                        <td class="px-3 py-2 text-right">${Math.round(hist.volumes_estimated_kg.total[idx] / 1000).toLocaleString()} MT</td>
-                        <td class="px-3 py-2 text-right font-bold text-slate-900">${Math.round(hist.volumes_actual_kg.total[idx] / 1000).toLocaleString()} MT</td>
-                        <td class="px-3 py-2 text-right font-bold ${hist.realization_rates_pct.total[idx] < 70 ? 'text-amber-700' : 'text-emerald-700'}">${hist.realization_rates_pct.total[idx]}%</td>
-                        <td class="px-3 py-2 text-right text-red-600">${hist.farmers.nc[idx]}</td>
-                    </tr>
-                `).join('')}
-                <tr class="bg-slate-100/80 font-bold border-t-2 border-slate-300">
-                    <td class="px-4 py-2 font-sans">5-Year Average</td>
-                    <td class="px-3 py-2 text-right">1,628</td>
-                    <td class="px-3 py-2 text-right">1,353</td>
-                    <td class="px-3 py-2 text-right text-emerald-800">82.4%</td>
-                    <td class="px-3 py-2 text-right">3,873 MT</td>
-                    <td class="px-3 py-2 text-right">2,712 MT</td>
-                    <td class="px-3 py-2 text-right text-emerald-800">71.4%</td>
-                    <td class="px-3 py-2 text-right text-red-700">372</td>
+            <tbody class="divide-y divide-slate-100 font-sans tabular-nums">
+                ${years.map(y => {
+                    const o = hist.organic_sales[String(y)];
+                    const c = hist.compliance[String(y)];
+                    return `
+                        <tr class="hover:bg-slate-50/90 transition-colors">
+                            <td class="px-5 py-3 font-bold text-slate-800">${y}</td>
+                            <td class="px-4 py-3 text-right text-slate-700">${o.exp_farmers.toLocaleString()}</td>
+                            <td class="px-4 py-3 text-right text-slate-700">${o.act_farmers.toLocaleString()}</td>
+                            <td class="px-4 py-3 text-right text-emerald-700 font-semibold">${o.selling_rate_pct.toFixed(1)}%</td>
+                            <td class="px-4 py-3 text-right text-slate-700">${Math.round(o.expected_kg.eligible4_total / 1000).toLocaleString()} MT</td>
+                            <td class="px-4 py-3 text-right font-bold text-slate-900">${Math.round(o.actual_kg.eligible4_total / 1000).toLocaleString()} MT</td>
+                            <td class="px-4 py-3 text-right font-bold ${o.realization_eligible4_pct < 70 ? 'text-amber-700' : 'text-emerald-700'}">${o.realization_eligible4_pct.toFixed(1)}%</td>
+                            <td class="px-5 py-3 text-right text-rose-600 font-medium">${c.nc_farmers.toLocaleString()}</td>
+                        </tr>`;
+                }).join('')}
+                <tr class="bg-slate-100/80 font-bold border-t-2 border-slate-300 text-slate-900">
+                    <td class="px-5 py-3">5-Year Average</td>
+                    <td class="px-4 py-3 text-right">${avgExpF.toLocaleString()}</td>
+                    <td class="px-4 py-3 text-right">${avgActF.toLocaleString()}</td>
+                    <td class="px-4 py-3 text-right text-emerald-800">${avgSellRate}%</td>
+                    <td class="px-4 py-3 text-right">${avgEstMT.toLocaleString()} MT</td>
+                    <td class="px-4 py-3 text-right">${avgActMT.toLocaleString()} MT</td>
+                    <td class="px-4 py-3 text-right text-emerald-800">${avgRealRate}%</td>
+                    <td class="px-5 py-3 text-right text-rose-700">${avgNC.toLocaleString()}</td>
                 </tr>
             </tbody>
         </table>
@@ -1132,71 +1253,82 @@ function renderHistoricalTable(hist) {
     if (el) el.innerHTML = html;
 }
 
+function renderTableRow(label, values, decimals = 0, extraRowClass = '') {
+    return `
+        <tr class="hover:bg-slate-50/90 transition-colors ${extraRowClass}">
+            <td class="px-5 py-2.5 font-sans ${extraRowClass ? '' : 'text-slate-700'}">${label}</td>
+            ${values.map((v, idx) => `<td class="px-4 py-2.5 text-right ${idx === 0 ? 'bg-slate-50/60 border-r border-slate-200/70' : ''}">${typeof v === 'number' ? v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : (v ?? '—')}</td>`).join('')}
+        </tr>
+    `;
+}
+
 // 5. Render Transition & Incentive Schedule Table
 function renderTransitionTable(sc) {
     const years = sc.years;
-    const isUSD = currentUnitCurrency === 'USD';
     const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const tipCell = (valStr, title, calc, formula, why, extraClass = '') => `
-        <td class="px-3 py-1.5 text-right cursor-help hover:bg-amber-100/60 transition-colors ${extraClass}"
+        <td class="px-4 py-2.5 text-right cursor-help hover:bg-amber-100/70 hover:text-amber-950 transition-colors ${extraClass}"
             data-ftitle="${esc(title)}"
             data-fcalc="${esc(calc)}"
             data-fexcel="${esc(formula)}"
-            data-fwhy="${esc(why)}">
-            <span class="border-b border-dotted border-slate-300">${valStr}</span>
-        </td>`;
+            data-fwhy="${esc(why)}">${valStr}</td>`;
 
     const buildIncCells = (stageLabel, fArr, usdArr, rateKhr) => usdArr.map((v, idx) => {
         const cnt = fArr[idx];
-        const eligKg = cnt * 1768;
         const valRounded = Math.round(v);
+        const eligPct = idx === 0 ? '97.54%' : '96.65%';
+        const effKg = idx === 0 ? 1724.5 : 1708.8;
         return tipCell(
             `$${valRounded.toLocaleString()}`,
             `${stageLabel} Incentive • ${years[idx]}`,
-            `${cnt.toLocaleString()} farmers × 1,768 kg (40% of 4,420 kg) × ${rateKhr} KHR ÷ 4,100 = $${valRounded.toLocaleString()}`,
-            `=ROUND( ${stageLabel} Farmers × 4,420 kg × 40% × ${rateKhr} KHR ÷ 4,100, 0 )`,
-            `Why: Conservation incentive covers 40% of total farm production across all varieties at ${rateKhr} KHR/kg.`
+            `${cnt.toLocaleString()} × 4,420 kg × ${eligPct} × 40% × ${rateKhr} ÷ 4,100 = $${valRounded.toLocaleString()}`,
+            `=ROUND( ${stageLabel} × ${effKg} kg × ${rateKhr} ÷ 4,100, 0 )`,
+            `Why: Sticky Rice is excluded from incentive calculations; only 4 eligible varieties qualify at ${rateKhr} KHR/kg.`,
+            idx === 0 ? 'bg-slate-50/60 border-r border-slate-200/70 font-medium text-slate-800' : 'text-slate-700'
         );
     }).join('');
 
+    const p2Kg = sc.part2_transition_volumes_kg;
+    const inc = sc.incentive_commitments;
+
     let html = `
-        <table class="w-full text-xs text-left">
-            <thead class="bg-slate-100 text-slate-700 uppercase font-semibold border-b border-slate-200">
+        <table class="w-full text-[13.5px] text-left border-collapse">
+            <thead class="bg-slate-100/95 text-slate-700 text-xs uppercase font-bold tracking-wider border-b-2 border-slate-200">
                 <tr>
-                    <th class="px-4 py-3">Incentive Metric</th>
-                    ${years.map(y => `<th class="px-3 py-3 text-right">${y}</th>`).join('')}
+                    <th class="px-5 py-3.5">Incentive Metric</th>
+                    ${years.map((y, idx) => `<th class="px-4 py-3.5 text-right text-[14px] ${idx === 0 ? 'bg-sky-50/80 text-sky-950 border-r border-slate-200/80' : ''}">${y}</th>`).join('')}
                 </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100 font-mono">
-                ${renderTableRow("Transition Year 0 (WF) Farmers", sc.farmers.transition_yr0)}
-                ${renderTableRow("Transition Year 1 (Ibis I) Farmers", sc.farmers.transition_yr1)}
-                ${renderTableRow("Transition Year 2 (Ibis II) Farmers", sc.farmers.transition_yr2)}
-                ${renderTableRow("Yr 0 Total Farm Production (kg)", sc.part2_transition_volumes_kg.yr0_wf_volume)}
-                ${renderTableRow("Yr 1 Total Farm Production (kg)", sc.part2_transition_volumes_kg.yr1_volume)}
-                ${renderTableRow("Yr 2 Total Farm Production (kg)", sc.part2_transition_volumes_kg.yr2_volume)}
-                <tr class="bg-slate-50 font-bold">
-                    <td class="px-4 py-1.5 font-sans">Total Transition Production (kg)</td>
-                    ${sc.part2_transition_volumes_kg.combined_volume.map(v => `<td class="px-3 py-1.5 text-right">${v.toLocaleString()}</td>`).join('')}
+            <tbody class="divide-y divide-slate-100 font-sans tabular-nums">
+                ${renderTableRow('Transition Year 0 (WF) Farmers', sc.farmers.transition_yr0)}
+                ${renderTableRow('Transition Year 1 (Ibis I) Farmers', sc.farmers.transition_yr1)}
+                ${renderTableRow('Transition Year 2 (Ibis II) Farmers', sc.farmers.transition_yr2)}
+                ${renderTableRow('Yr 0 Total Farm Production (kg)', p2Kg.yr0_wf_volume)}
+                ${renderTableRow('Yr 1 Total Farm Production (kg)', p2Kg.yr1_volume)}
+                ${renderTableRow('Yr 2 Total Farm Production (kg)', p2Kg.yr2_volume)}
+                <tr class="bg-slate-50/90 hover:bg-slate-100/70 font-bold text-slate-900 border-y border-slate-200 transition-colors">
+                    <td class="px-5 py-2.5 font-sans">Total Transition Production (kg)</td>
+                    ${p2Kg.combined_volume.map((v, idx) => `<td class="px-4 py-2.5 text-right ${idx === 0 ? 'bg-slate-100/80 border-r border-slate-200/80' : ''}">${Math.round(v).toLocaleString()}</td>`).join('')}
                 </tr>
-                ${renderTableRow("Eligible 40% Incentive Volume (kg)", sc.part2_transition_volumes_kg.combined_volume.map((v, idx) => idx === 0 ? (sc.farmers.transition_yr0[0] + sc.farmers.transition_yr1[0] + sc.farmers.transition_yr2[0]) * 1768 : Math.round(v * 0.40)))}
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Yr 0 Incentive @ 200 KHR/kg (USD)</td>${buildIncCells("WF (Yr 0)", sc.farmers.transition_yr0, sc.incentive_commitments.yr0_incentive_usd, 200)}</tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Yr 1 Incentive @ 200 KHR/kg (USD)</td>${buildIncCells("Ibis I (Yr 1)", sc.farmers.transition_yr1, sc.incentive_commitments.yr1_incentive_usd, 200)}</tr>
-                <tr><td class="px-4 py-1.5 font-sans text-slate-600">Yr 2 Incentive @ 250 KHR/kg (USD)</td>${buildIncCells("Ibis II (Yr 2)", sc.farmers.transition_yr2, sc.incentive_commitments.yr2_incentive_usd, 250)}</tr>
-                <tr class="bg-amber-50 font-bold text-amber-900 border-t border-b border-amber-200">
-                    <td class="px-4 py-2 font-sans">Total Incentive Commitment (${isUSD ? 'USD' : 'Million KHR'})</td>
-                    ${sc.incentive_commitments.total_incentive_usd.map((v, idx) => {
-                        const y0 = Math.round(sc.incentive_commitments.yr0_incentive_usd[idx]);
-                        const y1 = Math.round(sc.incentive_commitments.yr1_incentive_usd[idx]);
-                        const y2 = Math.round(sc.incentive_commitments.yr2_incentive_usd[idx]);
+                ${renderTableRow('Eligible 40% Incentive Volume (kg)', inc.eligible_40pct_volume_kg)}
+                <tr><td class="px-5 py-2.5 font-sans text-slate-700">Yr 0 Incentive @ 200 KHR/kg (USD)</td>${buildIncCells('WF (Yr 0)', sc.farmers.transition_yr0, inc.yr0_incentive_usd, 200)}</tr>
+                <tr><td class="px-5 py-2.5 font-sans text-slate-700">Yr 1 Incentive @ 200 KHR/kg (USD)</td>${buildIncCells('Ibis I (Yr 1)', sc.farmers.transition_yr1, inc.yr1_incentive_usd, 200)}</tr>
+                <tr><td class="px-5 py-2.5 font-sans text-slate-700">Yr 2 Incentive @ 250 KHR/kg (USD)</td>${buildIncCells('Ibis II (Yr 2)', sc.farmers.transition_yr2, inc.yr2_incentive_usd, 250)}</tr>
+                <tr class="bg-amber-50/85 hover:bg-amber-100/60 font-bold text-amber-950 border-y border-amber-200 transition-colors">
+                    <td class="px-5 py-3 font-sans">Total Incentive Commitment (USD)</td>
+                    ${inc.total_incentive_usd.map((v, idx) => {
+                        const y0 = Math.round(inc.yr0_incentive_usd[idx]);
+                        const y1 = Math.round(inc.yr1_incentive_usd[idx]);
+                        const y2 = Math.round(inc.yr2_incentive_usd[idx]);
                         const totUsd = Math.round(v);
-                        const disp = isUSD ? `$${totUsd.toLocaleString()}` : `${Math.round(sc.incentive_commitments.total_incentive_khr[idx] / 1000000)}M KHR`;
+                        const totM = (inc.total_incentive_khr[idx] / 1000000).toFixed(1);
                         return tipCell(
-                            disp,
-                            `Total Incentive • ${years[idx]}`,
-                            `$${y0.toLocaleString()} (WF) + $${y1.toLocaleString()} (Ibis I) + $${y2.toLocaleString()} (Ibis II) = $${totUsd.toLocaleString()}`,
-                            `=ROUND( WF Incentive + Ibis I Incentive + Ibis II Incentive, 0 )`,
-                            `Why: Annual conservation incentive budget required to support active transition farmers.`,
-                            'py-2'
+                            `$${totUsd.toLocaleString()}`,
+                            `Total Eligible Incentive • ${years[idx]}`,
+                            `$${y0.toLocaleString()} + $${y1.toLocaleString()} + $${y2.toLocaleString()} = $${totUsd.toLocaleString()} (${totM}M KHR)`,
+                            `=ROUND( WF + Ibis I + Ibis II [4 Eligible Var.], 0 )`,
+                            `Why: Sticky Rice is excluded from WF through Ibis II incentive budgets.`,
+                            idx === 0 ? 'py-3 bg-amber-100/70 border-r border-amber-200/80 font-bold' : 'py-3 font-bold'
                         );
                     }).join('')}
                 </tr>
@@ -1211,7 +1343,7 @@ function renderTransitionTable(sc) {
     }
 }
 
-// 6. Export Forecast Table (exact visible table data) as CSV or Excel
+// 6. Export Forecast Tables (exact visible web table layout & order) as CSV or Excel
 function triggerFileDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1223,8 +1355,8 @@ function triggerFileDownload(blob, filename) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function exportMasterTableCSV() {
-    const table = document.querySelector('#masterTableContainer table');
+function exportTableCSV(containerId, filename) {
+    const table = document.querySelector(`#${containerId} table`);
     if (!table) return;
 
     const lines = [];
@@ -1238,11 +1370,11 @@ function exportMasterTableCSV() {
 
     const csvContent = '\uFEFF' + lines.join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    triggerFileDownload(blob, 'IRCC_Paddy_Purchase_Forecast_2026_2033.csv');
+    triggerFileDownload(blob, filename);
 }
 
-function exportMasterTableExcel() {
-    const table = document.querySelector('#masterTableContainer table');
+function exportTableExcel(containerId, opts) {
+    const table = document.querySelector(`#${containerId} table`);
     if (!table) return;
 
     const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1251,17 +1383,19 @@ function exportMasterTableExcel() {
         const isHeader = rIdx === 0;
         const cells = Array.from(tr.querySelectorAll('th, td'));
         const isSection = cells.length === 1 && cells[0].hasAttribute('colspan');
-        const rowText = cells[0]?.textContent || '';
+        const rowText = (cells[0]?.textContent || '').replace(/\s+/g, ' ').trim();
+        const isStageGroupRow = /^(Part 2\.\d|Part 3\.\d)/.test(rowText) && !isSection;
 
         let bg = '#ffffff';
         let weight = 'normal';
         let color = '#1e293b';
         if (isHeader) { bg = '#15803d'; color = '#ffffff'; weight = 'bold'; }
         else if (isSection) { bg = '#f1f5f9'; weight = 'bold'; color = '#0f172a'; }
-        else if (rowText.includes('Total Organic Volume')) { bg = '#dcfce7'; weight = 'bold'; color = '#14532d'; }
+        else if (rowText.includes('Total Organic Volume') || rowText.includes('Total Active Compliant Farmers')) { bg = '#dcfce7'; weight = 'bold'; color = '#14532d'; }
         else if (rowText.includes('Combined Transition Production')) { bg = '#dbeafe'; weight = 'bold'; color = '#1e3a8a'; }
-        else if (rowText.includes('Total Pipeline Farmers')) { bg = '#fef3c7'; weight = 'bold'; color = '#78350f'; }
-        else if (rowText.includes('Total Active Farmers')) { bg = '#f1f5f9'; weight = 'bold'; color = '#0f172a'; }
+        else if (rowText.includes('Total Transition Farmers')) { bg = '#fef3c7'; weight = 'bold'; color = '#78350f'; }
+        else if (rowText.includes('Non-Compliance')) { bg = '#ffe4e6'; weight = 'bold'; color = '#9f1239'; }
+        else if (isStageGroupRow) { bg = '#f8fafc'; weight = 'bold'; color = '#0f172a'; }
 
         rowsHtml += '<tr>';
         cells.forEach((cell, cIdx) => {
@@ -1286,20 +1420,19 @@ function exportMasterTableExcel() {
             <meta charset="UTF-8">
             <!--[if gte mso 9]><xml>
                 <x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-                    <x:Name>Paddy Forecast 2026-2033</x:Name>
+                    <x:Name>${escHtml(opts.sheetName)}</x:Name>
                     <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
                 </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
             </xml><![endif]-->
         </head>
         <body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;">
             <table>
-                <tr><td colspan="9" style="font-size:13pt;font-weight:bold;color:#15803d;padding:6px 4px;">Ibis Rice Conservation Company (IRCC) — Paddy Purchase &amp; Farmer Forecast (2026 - 2033)</td></tr>
+                <tr><td colspan="9" style="font-size:13pt;font-weight:bold;color:#15803d;padding:6px 4px;">${escHtml(opts.sheetTitle)}</td></tr>
                 ${rowsHtml}
             </table>
         </body>
         </html>`;
 
     const blob = new Blob([excelDoc], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    triggerFileDownload(blob, 'IRCC_Paddy_Purchase_Forecast_2026_2033.xls');
+    triggerFileDownload(blob, opts.filename);
 }
-
